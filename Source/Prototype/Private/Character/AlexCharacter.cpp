@@ -749,6 +749,26 @@ void AAlexCharacter::Landed(const FHitResult& Hit)
 	WallRunJumpCooldown = 0.f;// 重置墙跳冷却时间
 }
 
+void AAlexCharacter::CalculateWallTangentVectors(const FVector& WallNormal, FVector& OutWallUp, FVector& OutWallRight) const
+{
+	FVector WallUp = WallNormal;
+
+	// 防崩溃：防止地板/天花板情况
+	if (FMath::Abs(WallUp.Z) > 0.9f)
+	{
+		WallUp = FVector::CrossProduct(WallUp, GetActorForwardVector()).GetSafeNormal();
+	}
+
+	// 计算真正的上方向（切线）
+	WallUp = FVector::CrossProduct(WallNormal, FVector::CrossProduct(FVector::UpVector, WallUp)).GetSafeNormal();
+
+	// 计算右方向（切线）
+	FVector WallRight = FVector::CrossProduct(WallUp, -WallNormal).GetSafeNormal();
+
+	OutWallUp = WallUp;
+	OutWallRight = WallRight;
+}
+
 void AAlexCharacter::PlayMontageSection(UAnimMontage* Montage, const FName& SectionName)
 {
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
