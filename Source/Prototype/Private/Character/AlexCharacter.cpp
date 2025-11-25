@@ -316,6 +316,24 @@ void AAlexCharacter::StartWallRun()
 		StopGlide();
 	}
 
+	// 1. 计算墙跑方向（从UpdateWallRun提取的局部逻辑）
+    FVector WallUp = WallDetection->WallNormal;
+    if (FMath::Abs(WallUp.Z) > 0.9f)
+    {
+        WallUp = FVector::CrossProduct(WallUp, GetActorForwardVector()).GetSafeNormal();
+    }
+    WallUp = FVector::CrossProduct(WallDetection->WallNormal, FVector::CrossProduct(FVector::UpVector, WallUp)).GetSafeNormal();
+    FVector WallRight = FVector::CrossProduct(WallUp, -WallDetection->WallNormal).GetSafeNormal();
+    FVector WallRunDir = (WallRight * LastMovementInput.X + WallUp * LastMovementInput.Y).GetSafeNormal();
+
+    if (WallRunDir.IsNearlyZero()) return; // 方向无效则不启动
+
+    // 2. 获取当前水平速度（疾跑速度）
+    float CurrentSpeed2D = FVector::Dist2D(FVector::ZeroVector, GetCharacterMovement()->Velocity);
+    
+    // 3. 设置初始速度：至少为WallRunSpeed，如果疾跑更快则保留疾跑速度
+    float InitialSpeed = FMath::Max(CurrentSpeed2D, WallRunSpeed);
+
 	bIsWallRunning = true;
 	ActionState = EActionState::EAS_WallRunning;
 	DashCount = 2;		//重置Dash次数
@@ -331,7 +349,8 @@ void AAlexCharacter::StartWallRun()
 		AnimInst->bIsWallRunning = true;
 	}
 
-	GetCharacterMovement()->Velocity = FVector::ZeroVector;
+	//直接设置初始速度
+	GetCharacterMovement()->Velocity = WallRunDir * InitialSpeed;
 	GetCharacterMovement()->bConstrainToPlane = false;
 
 	GetCharacterMovement()->MaxFlySpeed = WallRunSpeed * 1.5f;
@@ -747,26 +766,6 @@ void AAlexCharacter::Landed(const FHitResult& Hit)
 	StopClimb();
 
 	WallRunJumpCooldown = 0.f;// 重置墙跳冷却时间
-}
-
-void AAlexCharacter::CalculateWallTangentVectors(const FVector& WallNormal, FVector& OutWallUp, FVector& OutWallRight) const
-{
-	FVector WallUp = WallNormal;
-
-	// 防崩溃：防止地板/天花板情况
-	if (FMath::Abs(WallUp.Z) > 0.9f)
-	{
-		WallUp = FVector::CrossProduct(WallUp, GetActorForwardVector()).GetSafeNormal();
-	}
-
-	// 计算真正的上方向（切线）
-	WallUp = FVector::CrossProduct(WallNormal, FVector::CrossProduct(FVector::UpVector, WallUp)).GetSafeNormal();
-
-	// 计算右方向（切线）
-	FVector WallRight = FVector::CrossProduct(WallUp, -WallNormal).GetSafeNormal();
-
-	OutWallUp = WallUp;
-	OutWallRight = WallRight;
 }
 
 void AAlexCharacter::PlayMontageSection(UAnimMontage* Montage, const FName& SectionName)

@@ -84,14 +84,6 @@ private:
 	UPROPERTY(BlueprintReadOnly, Category="Input", meta = (AllowPrivateAccess = "true"))
 	bool bHasMovementInput = false;			// 是否有移动输入
 
-	/**
-	* 计算墙面的切线方向和右方向
-	* @param WallNormal 墙面的法线向量
-	* @param OutWallUp 输出的墙面上方向（切线）
-	* @param OutWallRight 输出的墙面右方向（切线）
-	*/
-	void CalculateWallTangentVectors(const FVector& WallNormal, FVector& OutWallUp, FVector& OutWallRight) const;
-
 	/* 自动翻越参数*/
 	UPROPERTY(BlueprintReadWrite, Category="Vault", meta=(AllowPrivateAccess="true"))
 	bool bIsVaulting = false;
