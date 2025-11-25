@@ -89,19 +89,30 @@ private:
 	bool bIsVaulting = false;
 	
 	UPROPERTY(BlueprintReadWrite, Category="Vault", meta=(AllowPrivateAccess="true"))
-	bool bVaultQueued = false;  // 新增：是否有下一跳在排队
-	
-	UPROPERTY(BlueprintReadOnly, Category="Vault", meta=(AllowPrivateAccess="true"))
-	FVector NextVaultLaunchVelocity;  // 下一跳的预设速度
+	bool bVaultQueued = false;  //是否有下一跳在排队
 	
 	UPROPERTY(EditAnywhere, Category="Vault")
-	float VaultHeightThreshold = 50.f;  // 最低障碍高度
+	float VaultHeightThreshold = 50.f;  // 最低翻越高度（低于此高度不触发）
+	
+	UPROPERTY(EditAnywhere, Category="Vault")
+	float MaxVaultHeight = 140.f;       // 最大翻越高度（防止跳太高）
+	
+	UPROPERTY(EditAnywhere, Category="Vault")
+	float VaultHorizontalSpeed = 500.f; // 最小水平速度
 
-	/* 连续翻越方法 */
-	//void TryAutoVault();                    // 尝试翻越（可入队）
-	//void StartVault(const FVector& LaunchVel);  // 立即执行翻越
-	//void OnVaultAnimEnd(UAnimMontage* Montage, bool bInterrupted);  // 动画结束回调
-	//FVector CalculateVaultVelocity();       // 动态计算跳跃速度
+	UPROPERTY(EditAnywhere, Category="Vault")
+	float MaxVaultHorizontalSpeed = 800.f;	// 最大水平速度
+
+	UPROPERTY(EditAnywhere, Category="Vault", meta=(ClampMin=0.5, ClampMax=2.0, UIMin=0.5, UIMax=2.0))
+	float VaultVerticalMultiplier = 1.2f; // 默认1.2倍
+	
+	// 连续翻越方法
+	void TryAutoVault();                    // 尝试翻越（可入队）
+	void StartVault(const FVector& LaunchVel);  // 立即执行翻越
+	UFUNCTION(BlueprintCallable, Category="Vault")
+	void OnVaultAnimEnd();					// 动画结束重置状态
+	float CalculateVaultHeight() const;     // 计算障碍物高度
+	FVector CalculateVaultVelocity();       // 动态计算跳跃速度
 
 	/* 墙跑参数 */
 	UPROPERTY(BlueprintReadWrite, Category="WallRun", meta = (allowPrivateAccess = "true"))

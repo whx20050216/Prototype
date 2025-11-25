@@ -27,9 +27,6 @@ public:
 	void UpdateDetection(); 
 
 	UFUNCTION(BlueprintCallable, Category="Trace")
-	void ForwardCapsuleTrace();
-
-	UFUNCTION(BlueprintCallable, Category="Trace")
 	void RightCapsuleTrace();
 
 	UFUNCTION(BlueprintCallable, Category="Trace")
@@ -40,6 +37,9 @@ public:
 
     UFUNCTION(BlueprintCallable, Category="Trace Results")
     const FHitResult& GetLeftCapsuleHit() const { return LeftCapsuleHit; }
+
+    UFUNCTION(BlueprintCallable, Category="Trace Results")
+	const FHitResult& GetUpToDownHit() const { return UpToDownHit; }
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Trace")
     float LineTraceLength = 250.f;
@@ -73,13 +73,13 @@ protected:
 	FHitResult BottomHit;
 
 	UPROPERTY()
-	FHitResult ForwardCapsuleHit;
-
-	UPROPERTY()
 	FHitResult RightCapsuleHit;
 
 	UPROPERTY()
 	FHitResult LeftCapsuleHit;
+
+	UPROPERTY()
+	FHitResult UpToDownHit;
 	
 private:
 	UPROPERTY()
@@ -90,6 +90,8 @@ private:
 
 	UPROPERTY()
 	bool bIsTracing = false;
+
+	void UpToDownTrace();
 
 	void BottomTrace();
 

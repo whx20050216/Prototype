@@ -35,6 +35,7 @@ void UWallDetectionComponent::UpdateDetection()
 		{
 			DetectionResult = EDetectionResult::VaultPossible;
 			bCanVault = true;
+			UpToDownTrace();
 		}
 		return;
 	}
@@ -44,6 +45,7 @@ void UWallDetectionComponent::UpdateDetection()
     {
         DetectionResult = EDetectionResult::VaultPossible;
 		bCanVault = true;
+		UpToDownTrace();
         return;
     }
 
@@ -52,22 +54,40 @@ void UWallDetectionComponent::UpdateDetection()
     {
         DetectionResult = EDetectionResult::VaultPossible;
 		bCanVault = true;
+		UpToDownTrace();
         return;
     }
 
 	EvaluateResults();
 }
 
-void UWallDetectionComponent::ForwardCapsuleTrace()
+void UWallDetectionComponent::UpToDownTrace()
 {
-	CapsuleTrace(
-	CharacterOwner->GetActorForwardVector(),
-	ForwardCapsuleHit,
-	CapsuleTraceRadius,
-	CapsuleHalfHeight,
-	CapsuleTraceLength + 100.f,
-	FColor::Cyan  // 前方用青色区分
+	if (!CharacterOwner || !GetWorld()) return;
+
+	if (!bCanVault) return;
+
+	// 选择参考点：优先用 Bottom，其次用 Middle（两者必有一个命中）
+	const FHitResult* ReferenceHit = BottomHit.bBlockingHit ? &BottomHit : &MiddleHit;
+	if (!ReferenceHit || !ReferenceHit->bBlockingHit) return;
+
+	FVector TraceStart = ReferenceHit->Location + FVector(0.f, 0.f, 200.f);
+	FVector TraceEnd = ReferenceHit->Location;
+
+	GetWorld()->LineTraceSingleByObjectType(
+		UpToDownHit,
+		TraceStart,
+		TraceEnd,
+		FCollisionObjectQueryParams(ECollisionChannel::ECC_WorldStatic), // 检测静态物体
+		FCollisionQueryParams(NAME_None, false, CharacterOwner) // 忽略自身
 	);
+
+	// Debug绘制：紫色线 + 橙色命中点
+	DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Purple, false, 0.1f, 0, 1.0f);
+	if (UpToDownHit.bBlockingHit)
+	{
+		DrawDebugSphere(GetWorld(), UpToDownHit.Location, 10.0f, 16, FColor::Orange, false, 0.1f);
+	}
 }
 
 void UWallDetectionComponent::BottomTrace()

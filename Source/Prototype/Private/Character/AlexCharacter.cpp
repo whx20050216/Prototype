@@ -63,9 +63,17 @@ void AAlexCharacter::Tick(float DeltaTime)
 
 	WallDetection->UpdateDetection();
 
+	//疾跑时尝试自动翻越
+	if (bRunActive)
+	{
+		TryAutoVault();
+	}
+
+	
+
 	//奔跑或滑翔下自动检测并启动墙跑
 	bool bShouldCheckWallRun = (bRunActive || ActionState == EActionState::EAS_Gliding);
-	if (!bIsWallRunning && !bIsClimbing && WallDetection->bCanWallRun && bShouldCheckWallRun && WallRunJumpCooldown <= 0.f)
+	if (!bIsWallRunning && !bIsClimbing && !bIsVaulting && WallDetection->bCanWallRun && bShouldCheckWallRun && WallRunJumpCooldown <= 0.f)
     {
         StartWallRun();
     }
@@ -78,7 +86,6 @@ void AAlexCharacter::Tick(float DeltaTime)
 	if (bIsWallRunning)
 	{
 		UpdateWallRun(DeltaTime);
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("WallRun once"));
 	}
 }
 
@@ -164,7 +171,6 @@ void AAlexCharacter::MOVE_Completed(const FInputActionValue& Value)
 	if (bIsWallRunning)
 	{
 		StopWallRun();
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("WallRun End"));
 	}
 	if (!bIsClimbing)
     {
@@ -292,6 +298,113 @@ void AAlexCharacter::CLIMB()
 	}
 }
 
+void AAlexCharacter::TryAutoVault()
+{
+	if (bIsVaulting)
+	{
+		bVaultQueued = true;
+		return;
+	}
+
+	// 检测条件：地面移动 + 可翻越 + 不在特殊状态
+	bool bIsGrounded = GetCharacterMovement()->MovementMode == MOVE_Walking;
+	bool bIsInSpecialMove = bIsWallRunning || bIsClimbing || ActionState == EActionState::EAS_Gliding;
+	if (!bIsGrounded || bIsInSpecialMove || !WallDetection || !WallDetection->bCanVault)
+    {
+        return;
+    }
+
+	// 计算并执行
+	FVector LaunchVel = CalculateVaultVelocity();
+    if (!LaunchVel.IsNearlyZero())
+    {
+        StartVault(LaunchVel);
+    }
+}
+
+void AAlexCharacter::StartVault(const FVector& LaunchVel)
+{
+	bIsVaulting = true;
+	ActionState = EActionState::EAS_Vaulting;
+	bVaultQueued = false;
+
+	// 禁用角色控制，切换到飞行模式
+    GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+    GetCharacterMovement()->StopMovementImmediately();
+
+	// 应用跳跃速度
+    LaunchCharacter(LaunchVel, true, true);
+
+	// 播放翻越动画
+    if (RunningVaultMontage)
+    {
+        PlayMontageSection(RunningVaultMontage, FName("Vault"));
+    }
+}
+
+void AAlexCharacter::OnVaultAnimEnd()
+{
+	// 恢复移动状态
+    bIsVaulting = false;
+    ActionState = EActionState::EAS_Unoccupied;
+    GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+    GetCharacterMovement()->bOrientRotationToMovement = true;
+
+    // 处理排队：立即尝试下一次翻越
+    if (bVaultQueued)
+    {
+        bVaultQueued = false;
+        TryAutoVault(); // 递归调用，处理连续翻越
+    }
+}
+
+float AAlexCharacter::CalculateVaultHeight() const
+{
+	if (!WallDetection || !WallDetection->GetUpToDownHit().bBlockingHit) return 0.f;
+
+	// 角色脚部Z坐标
+    float CharacterFootZ = GetActorLocation().Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+
+	// 障碍物顶部Z坐标（UpToDownHit的命中点）
+    float ObstacleTopZ = WallDetection->GetUpToDownHit().Location.Z;
+
+	// 返回相对高度
+	return ObstacleTopZ - CharacterFootZ;
+}
+
+FVector AAlexCharacter::CalculateVaultVelocity()
+{
+	float Height = CalculateVaultHeight();
+
+	// 限制在合理范围
+    Height = FMath::Clamp(Height, VaultHeightThreshold, MaxVaultHeight);
+	if (Height <= 0) return FVector::ZeroVector;
+
+	// 物理公式：v = √(2gh)，加10%安全余量
+    float Gravity = FMath::Abs(GetCharacterMovement()->GetGravityZ());
+    float VerticalVel = FMath::Sqrt(2 * Gravity * Height) * VaultVerticalMultiplier;
+
+	// 水平速度：保持当前方向，最低500
+    FVector HorizontalVel = GetCharacterMovement()->Velocity;
+    HorizontalVel.Z = 0;
+	float CurrentHorizSpeed = HorizontalVel.Size();
+	float ClampedHorizSpeed = FMath::Clamp(CurrentHorizSpeed, VaultHorizontalSpeed, MaxVaultHorizontalSpeed);
+    if (CurrentHorizSpeed < KINDA_SMALL_NUMBER)
+    {
+        HorizontalVel = GetActorForwardVector() * VaultHorizontalSpeed;
+    }
+    else
+    {
+        // 保持方向，但应用限制后的速度大小
+        HorizontalVel = HorizontalVel.GetSafeNormal() * ClampedHorizSpeed;
+    }
+
+	FVector LaunchVel = HorizontalVel.GetSafeNormal() * HorizontalVel.Size();
+    LaunchVel.Z = VerticalVel;
+
+    return LaunchVel;
+}
+
 void AAlexCharacter::StartWallRun()
 {
 	bool bIsAutoFromGlide = (ActionState == EActionState::EAS_Gliding);
@@ -379,7 +492,6 @@ void AAlexCharacter::StopWallRun()
 	}
 
 	ResetRun();
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Stop WallRun"));
 }
 
 void AAlexCharacter::UpdateWallRun(float DeltaTime)
@@ -764,6 +876,7 @@ void AAlexCharacter::Landed(const FHitResult& Hit)
 	// 确保停止滑翔
     StopGlide();
 	StopClimb();
+	OnVaultAnimEnd();
 
 	WallRunJumpCooldown = 0.f;// 重置墙跳冷却时间
 }
