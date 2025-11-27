@@ -69,8 +69,6 @@ void AAlexCharacter::Tick(float DeltaTime)
 		TryAutoVault();
 	}
 
-	
-
 	//奔跑或滑翔下自动检测并启动墙跑
 	bool bShouldCheckWallRun = (bRunActive || ActionState == EActionState::EAS_Gliding);
 	if (!bIsWallRunning && !bIsClimbing && !bIsVaulting && WallDetection->bCanWallRun && bShouldCheckWallRun && WallRunJumpCooldown <= 0.f)
@@ -368,6 +366,8 @@ float AAlexCharacter::CalculateVaultHeight() const
 	// 障碍物顶部Z坐标（UpToDownHit的命中点）
     float ObstacleTopZ = WallDetection->GetUpToDownHit().Location.Z;
 
+	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Character Foot Z: %.2f, Obstacle Top Z: %.2f"), CharacterFootZ, ObstacleTopZ));
+
 	// 返回相对高度
 	return ObstacleTopZ - CharacterFootZ;
 }
@@ -401,6 +401,8 @@ FVector AAlexCharacter::CalculateVaultVelocity()
 
 	FVector LaunchVel = HorizontalVel.GetSafeNormal() * HorizontalVel.Size();
     LaunchVel.Z = VerticalVel;
+
+	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Vault Height: %.2f, Launch Vel: (%.2f, %.2f, %.2f)"), Height, LaunchVel.X, LaunchVel.Y, LaunchVel.Z));
 
     return LaunchVel;
 }
@@ -643,7 +645,8 @@ void AAlexCharacter::UpdateClimb(float DeltaTime)
 	FVector WallRight = FVector::CrossProduct(WallUp, -WallDetection->WallNormal).GetSafeNormal();
 	if (bHasMovementInput)
 	{
-		if (LastMovementInput.X > 0.01f)
+		//用于处理左右攀爬时墙壁的碰撞检测（暂时不用）
+		/*if (LastMovementInput.X > 0.01f)
 		{
 			WallDetection->RightCapsuleTrace();
 			if (WallDetection->GetRightCapsuleHit().bBlockingHit)
@@ -658,7 +661,7 @@ void AAlexCharacter::UpdateClimb(float DeltaTime)
 			{
 				GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Left Wall Hit"));
 			}
-		}
+		}*/
 
 		ClimbDirection = (WallRight * LastMovementInput.X + WallUp * LastMovementInput.Y).GetSafeNormal();
 		if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))

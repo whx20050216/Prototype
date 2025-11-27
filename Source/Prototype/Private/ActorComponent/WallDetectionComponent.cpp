@@ -71,7 +71,7 @@ void UWallDetectionComponent::UpToDownTrace()
 	const FHitResult* ReferenceHit = BottomHit.bBlockingHit ? &BottomHit : &MiddleHit;
 	if (!ReferenceHit || !ReferenceHit->bBlockingHit) return;
 
-	FVector TraceStart = ReferenceHit->Location + FVector(0.f, 0.f, 200.f);
+	FVector TraceStart = ReferenceHit->Location + FVector(10.f, 0.f, 200.f);
 	FVector TraceEnd = ReferenceHit->Location;
 
 	GetWorld()->LineTraceSingleByObjectType(

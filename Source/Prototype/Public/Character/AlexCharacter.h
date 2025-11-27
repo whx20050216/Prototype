@@ -92,19 +92,19 @@ private:
 	bool bVaultQueued = false;  //是否有下一跳在排队
 	
 	UPROPERTY(EditAnywhere, Category="Vault")
-	float VaultHeightThreshold = 50.f;  // 最低翻越高度（低于此高度不触发）
+	float VaultHeightThreshold = 60.f;  // 最低翻越高度（低于此高度不触发）
 	
 	UPROPERTY(EditAnywhere, Category="Vault")
-	float MaxVaultHeight = 140.f;       // 最大翻越高度（防止跳太高）
+	float MaxVaultHeight = 80.f;       // 最大翻越高度（防止跳太高）
 	
 	UPROPERTY(EditAnywhere, Category="Vault")
-	float VaultHorizontalSpeed = 500.f; // 最小水平速度
+	float VaultHorizontalSpeed = 350.f; // 最小水平速度
 
 	UPROPERTY(EditAnywhere, Category="Vault")
-	float MaxVaultHorizontalSpeed = 800.f;	// 最大水平速度
+	float MaxVaultHorizontalSpeed = 550.f;	// 最大水平速度
 
 	UPROPERTY(EditAnywhere, Category="Vault", meta=(ClampMin=0.5, ClampMax=2.0, UIMin=0.5, UIMax=2.0))
-	float VaultVerticalMultiplier = 1.2f; // 默认1.2倍
+	float VaultVerticalMultiplier = 1.4f; // 默认1.2倍
 	
 	// 连续翻越方法
 	void TryAutoVault();                    // 尝试翻越（可入队）
