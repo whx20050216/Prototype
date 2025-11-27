@@ -15,5 +15,5 @@ public:
 	ABaseCharacter();
 
 protected:
-	
+	virtual void PlayMontageSection(UAnimMontage* Montage, const FName& SectionName);
 };

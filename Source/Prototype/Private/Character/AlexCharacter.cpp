@@ -366,8 +366,6 @@ float AAlexCharacter::CalculateVaultHeight() const
 	// 障碍物顶部Z坐标（UpToDownHit的命中点）
     float ObstacleTopZ = WallDetection->GetUpToDownHit().Location.Z;
 
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Character Foot Z: %.2f, Obstacle Top Z: %.2f"), CharacterFootZ, ObstacleTopZ));
-
 	// 返回相对高度
 	return ObstacleTopZ - CharacterFootZ;
 }
@@ -401,8 +399,6 @@ FVector AAlexCharacter::CalculateVaultVelocity()
 
 	FVector LaunchVel = HorizontalVel.GetSafeNormal() * HorizontalVel.Size();
     LaunchVel.Z = VerticalVel;
-
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Vault Height: %.2f, Launch Vel: (%.2f, %.2f, %.2f)"), Height, LaunchVel.X, LaunchVel.Y, LaunchVel.Z));
 
     return LaunchVel;
 }
@@ -882,14 +878,4 @@ void AAlexCharacter::Landed(const FHitResult& Hit)
 	OnVaultAnimEnd();
 
 	WallRunJumpCooldown = 0.f;// 重置墙跳冷却时间
-}
-
-void AAlexCharacter::PlayMontageSection(UAnimMontage* Montage, const FName& SectionName)
-{
-	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-	if (AnimInstance && Montage)
-	{
-		AnimInstance->Montage_Play(Montage);
-		AnimInstance->Montage_JumpToSection(SectionName, Montage);
-	}
 }

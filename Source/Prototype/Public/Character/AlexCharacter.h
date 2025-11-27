@@ -247,12 +247,9 @@ private:
 	FTimerHandle DashHandle;		// 冲刺计时器
 
 	
-
 	/*
-	*	PlayMontage
+	*	镜头及输入
 	*/
-	void PlayMontageSection(UAnimMontage* Montage, const FName& SectionName);
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SceneComponent", meta = (AllowPrivateAccess = "true"))
 	USpringArmComponent* SpringArm;
 
