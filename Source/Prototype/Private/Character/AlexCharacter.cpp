@@ -13,6 +13,8 @@
 #include "Character/AlexAnimInstance.h"
 #include "ActorComponent/WallDetectionComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "ActorComponent/AttributeComponent.h"
+#include "HUD/HealthWidget.h"
 
 AAlexCharacter::AAlexCharacter()
 {
@@ -38,6 +40,8 @@ AAlexCharacter::AAlexCharacter()
 	LastMovementInput = FVector2D::ZeroVector;// 存储原始输入
 
 	WallDetection = CreateDefaultSubobject<UWallDetectionComponent>(TEXT("WallDetection"));
+
+	AttributeComponent = CreateDefaultSubobject<UAttributeComponent>(TEXT("AttributeComponent"));
 }
 
 void AAlexCharacter::Tick(float DeltaTime)
@@ -129,6 +133,20 @@ void AAlexCharacter::BeginPlay()
 		{
 			Subsystem->AddMappingContext(DefaultMappingContext, 0);
 		}
+	}
+
+	if (HealthWidgetClass)  // 检查蓝图是否指定了类
+	{
+	    HealthWidget = CreateWidget<UHealthWidget>(GetWorld(), HealthWidgetClass);
+	    if (HealthWidget)
+	    {
+	        HealthWidget->AddToViewport();
+	        
+	        if (AttributeComponent)
+	        {
+	            HealthWidget->BindToAttributeComponent(AttributeComponent);
+	        }
+	    }
 	}
 }
 

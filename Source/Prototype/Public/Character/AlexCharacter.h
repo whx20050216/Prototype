@@ -14,6 +14,7 @@ class UInputAction;
 struct FInputActionValue;
 class UAnimMontage;
 class UWallDetectionComponent;
+class UHealthWidget;
 
 UCLASS()
 class PROTOTYPE_API AAlexCharacter : public ABaseCharacter
@@ -79,8 +80,20 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Vault")
 	UAnimMontage* RunningVaultMontage;
-	
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	UAttributeComponent* AttributeComponent;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
+    TSubclassOf<UHealthWidget> HealthWidgetClass;
+
+	// Widget实例
+    UPROPERTY()
+    UHealthWidget* HealthWidget;
+
 private:
+	
+
 	UPROPERTY(BlueprintReadOnly, Category="Input", meta = (AllowPrivateAccess = "true"))
 	bool bHasMovementInput = false;			// 是否有移动输入
 

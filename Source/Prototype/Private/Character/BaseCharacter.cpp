@@ -2,6 +2,8 @@
 
 
 #include "Character/BaseCharacter.h"
+#include "ActorComponent/AttributeComponent.h"
+#include "Components/WidgetComponent.h"
 
 ABaseCharacter::ABaseCharacter()
 {

@@ -6,6 +6,9 @@
 #include "GameFramework/Character.h"
 #include "BaseCharacter.generated.h"
 
+class UAttributeComponent;
+class UWidgetComponent;
+
 UCLASS()
 class PROTOTYPE_API ABaseCharacter : public ACharacter
 {
@@ -16,4 +19,5 @@ public:
 
 protected:
 	virtual void PlayMontageSection(UAnimMontage* Montage, const FName& SectionName);
+
 };
