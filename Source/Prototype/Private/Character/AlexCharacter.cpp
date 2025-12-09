@@ -58,49 +58,9 @@ void AAlexCharacter::Tick(float DeltaTime)
 	// 更新滑翔逻辑
     UpdateGlide(DeltaTime);
 
-	if (bIsDecelerating && !bHasMovementInput)
-    {
-        // 1. 禁用所有制动（必须在每帧设置，因为引擎可能会重置它）
-        GetCharacterMovement()->BrakingDecelerationWalking = 0.f;
-        GetCharacterMovement()->BrakingDecelerationFlying = 0.f;
-
-        // 2. 手动计算并应用减速（使用简单的线性衰减）
-        float DecelerationRate = 300.f; // 每秒减少300单位速度
-        float CurrentSpeed = GetCharacterMovement()->Velocity.Size();
-        float NewSpeed = FMath::Max(0.f, CurrentSpeed - DecelerationRate * DeltaTime);
-        
-        if (NewSpeed > 0.f)
-        {
-            // 保持原有方向，只改变大小
-            FVector VelDir = GetCharacterMovement()->Velocity.GetSafeNormal();
-            GetCharacterMovement()->Velocity = VelDir * NewSpeed;
-        }
-        else
-        {
-            GetCharacterMovement()->Velocity = FVector::ZeroVector;
-        }
-
-        // 3. 确保 MaxWalkSpeed 不会限制速度（设为极大值）
-        GetCharacterMovement()->MaxWalkSpeed = 99999.f;
-    }
-    else
-    {
-        // 只有在不减速时才允许引擎控制制动
-        if (!bIsDecelerating)
-        {
-            GetCharacterMovement()->BrakingDecelerationWalking = 2048.f;
-            GetCharacterMovement()->BrakingDecelerationFlying = 2048.f;
-            GetCharacterMovement()->MaxWalkSpeed = bRunActive ? 1500.f : 400.f;
-        }
-    }
-
-	/* 记录当前速度 */
-	CurrentMoveSpeed = GetCharacterMovement()->Velocity.Size();
-
 	/* 奔跑状态重置逻辑 */
 	ResetRun();
 
-	/* 射线检测 */
 	WallDetection->UpdateDetection();
 
 	//疾跑时尝试自动翻越
@@ -125,13 +85,6 @@ void AAlexCharacter::Tick(float DeltaTime)
 	{
 		UpdateWallRun(DeltaTime);
 	}
-
-	GEngine->AddOnScreenDebugMessage(
-    -1, 
-    0.05f, 
-    FColor::Yellow, 
-    FString::Printf(TEXT("Speed: %.1f | Decel: %s"), CurrentMoveSpeed, bIsDecelerating ? TEXT("ON") : TEXT("OFF"))
-);
 }
 
 void AAlexCharacter::ResetRun()
@@ -140,26 +93,11 @@ void AAlexCharacter::ResetRun()
 	bool bJustPressed = bHasNow && !bHadInputLastFrame;
 	bool bJustReleased = !bHasNow && bHadInputLastFrame;
 
-	/*if (bRunActive && (bJustPressed || bJustReleased))
+	if (bRunActive && (bJustPressed || bJustReleased))
 	{
 		bRunActive = false;
 		GetCharacterMovement()->MaxWalkSpeed = 400.f;
-	}*/
-	if (bRunActive && bJustReleased)
-	{
-		bIsDecelerating = true;
-		bRunActive = false;
 	}
-	if (bIsDecelerating && CurrentMoveSpeed <= 10.f)
-	{
-		bIsDecelerating = false;
-		GetCharacterMovement()->Velocity = FVector::ZeroVector; 
-		GetCharacterMovement()->MaxWalkSpeed = 400.f;
-
-		GetCharacterMovement()->BrakingDecelerationWalking = 2048.f;
-		GetCharacterMovement()->BrakingDecelerationFlying = 2048.f;
-	}
-
 	bHadInputLastFrame = bHasNow;
 }
 
@@ -202,16 +140,9 @@ bool AAlexCharacter::HasMovementInput()
 void AAlexCharacter::MOVE(const FInputActionValue& Value)
 {
 	if (bLockMove) return;
-
 	FVector2D MovementVector = Value.Get<FVector2D>();
-	bool bHasInputNow = !MovementVector.IsNearlyZero();
 
-	if (bIsDecelerating && bHasInputNow)
-	{
-		bIsDecelerating = false;
-	}
-
-	bHasMovementInput = bHasInputNow;
+	bHasMovementInput = !MovementVector.IsNearlyZero();
 	LastMovementInput = MovementVector; // 存储原始输入
 
 	//阻止所有其他移动状态
@@ -220,7 +151,7 @@ void AAlexCharacter::MOVE(const FInputActionValue& Value)
         return;
     }
 
-	if (Controller != nullptr && bHasInputNow)
+	if (Controller != nullptr)
 	{
 		const FRotator Rotation = Controller->GetControlRotation();
 		const FRotator YawRotation(0, Rotation.Yaw, 0);
