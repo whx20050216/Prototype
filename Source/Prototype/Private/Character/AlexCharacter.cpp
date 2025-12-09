@@ -844,7 +844,7 @@ void AAlexCharacter::UpdateGlide(float DeltaTime)
 
 	// 4. 让角色面朝速度方向（被动跟随，非强制旋转）
 	// 这确保角色模型看起来在"驾驶"滑翔轨迹
-	if (CurrentHorizontalSpeed > KINDA_SMALL_NUMBER)	
+	if (CurrentHorizontalSpeed > KINDA_SMALL_NUMBER)
 	{
 		FVector VelocityDir = FVector(Velocity.X, Velocity.Y, 0.f).GetSafeNormal();
         FRotator TargetRotation = FRotationMatrix::MakeFromX(VelocityDir).Rotator();
@@ -852,7 +852,7 @@ void AAlexCharacter::UpdateGlide(float DeltaTime)
         TargetRotation.Roll = 0.f;
 
 		// 平滑插值旋转，避免生硬
-        SetActorRotation(FMath::RInterpTo(GetActorRotation(), TargetRotation, DeltaTime, 8.f));
+        SetActorRotation(FMath::RInterpTo(GetActorRotation(), TargetRotation, DeltaTime, 8.0f));
 	}
 
 	// 5. 自动退出条件：落地或死亡
