@@ -84,6 +84,15 @@ private:
 	UPROPERTY(BlueprintReadOnly, Category="Input", meta = (AllowPrivateAccess = "true"))
 	bool bHasMovementInput = false;			// 是否有移动输入
 
+	UPROPERTY()
+	float CurrentMoveSpeed = 0.f;				// 当前速度
+	
+	UPROPERTY()
+	bool bIsDecelerating = false;			// 是否正在减速
+
+	UPROPERTY()
+	float CachedRunSpeed = 0.f;				// 缓存停止输入时的速度
+
 	/* 自动翻越参数*/
 	UPROPERTY(BlueprintReadWrite, Category="Vault", meta=(AllowPrivateAccess="true"))
 	bool bIsVaulting = false;
