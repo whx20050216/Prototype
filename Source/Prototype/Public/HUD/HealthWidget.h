@@ -21,11 +21,17 @@ public:
     void BindToAttributeComponent(UAttributeComponent* AttributeComp);
 
 protected:
-	UPROPERTY(meta=(BindWidget))
-    UProgressBar* HealthBar;
+	UPROPERTY(meta=(BindWidget, OptionalWidget))
+    UProgressBar* Bar_Health;
 
 	UPROPERTY(meta=(BindWidget, OptionalWidget))  //OptionalWidget防止蓝图没放这个控件就报错
-    UTextBlock* HealthText;  //建议加上文本显示
+    UTextBlock* Text_Health;  //建议加上文本显示
+
+	UPROPERTY(meta=(BideWidget, OptionalWidget))
+	UProgressBar* Bar_Mana;
+
+	UPROPERTY(meta=(BindWidget, OptionalWidget))
+	UTextBlock* Text_Mana;
 
 	UPROPERTY()
     UAttributeComponent* BoundAttributeComp;
@@ -34,8 +40,13 @@ protected:
     UFUNCTION()
     void OnHealthChanged(float CurrentHealth, float MaxHealth, float Delta);
 
+	UFUNCTION()
+	void OnManaChanged(float CurrentMana, float MaxMana, float Delta);
+
 	// 更新UI显示
     void UpdateHealthDisplay(float CurrentHealth, float MaxHealth);
+
+	void UpdateManaDisplay(float CurrentMana, float MaxMana);
 
 	// 解绑（防止野指针）
     virtual void NativeDestruct() override;

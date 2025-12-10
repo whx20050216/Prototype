@@ -39,3 +39,15 @@ void UAttributeComponent::ApplyHealthChange(float Delta)
 	}
 }
 
+void UAttributeComponent::ApplyManaChange(float Delta)
+{
+	const float OldMana = Mana;
+	Mana = FMath::Clamp(Mana + Delta, 0.0f, MaxMana);
+
+	const float ActualDelta = Mana - OldMana;
+	// 广播变化（只有变化时才广播，节省性能）
+    if (!FMath::IsNearlyZero(ActualDelta))
+    {
+        OnManaChanged.Broadcast(Mana, MaxMana, ActualDelta);
+    }
+}

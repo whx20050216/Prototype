@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Character/BaseCharacter.h"
+#include "Interfaces/PickupInterface.h"
 #include "Character/CharacterTypes.h"
 #include "AlexCharacter.generated.h"
 
@@ -15,9 +16,10 @@ struct FInputActionValue;
 class UAnimMontage;
 class UWallDetectionComponent;
 class UHealthWidget;
+class AItem;
 
 UCLASS()
-class PROTOTYPE_API AAlexCharacter : public ABaseCharacter
+class PROTOTYPE_API AAlexCharacter : public ABaseCharacter, public IPickupInterface
 {
 	GENERATED_BODY()
 	
@@ -26,6 +28,7 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	void ResetRun();
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	virtual void SetOverlappingItem(AItem* Item) override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WallDetection")
 	UWallDetectionComponent* WallDetection;
@@ -292,6 +295,9 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
 	UInputAction* ClimbAction;
+
+	UPROPERTY(VisibleAnywhere)
+	AItem* OverlappingItem;
 
 	UPROPERTY(BlueprintReadWrite, meta = (AllowPrivateAccess = "true"))
 	EActionState ActionState = EActionState::EAS_Unoccupied;//初始化动作状态为未占用

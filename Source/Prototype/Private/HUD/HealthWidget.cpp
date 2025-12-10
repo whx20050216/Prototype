@@ -11,8 +11,12 @@ void UHealthWidget::BindToAttributeComponent(UAttributeComponent* AttributeComp)
 	if (!AttributeComp) return;
 
 	BoundAttributeComp = AttributeComp;
+
     AttributeComp->OnHealthChanged.AddDynamic(this, &UHealthWidget::OnHealthChanged);
     UpdateHealthDisplay(AttributeComp->GetHealth(), AttributeComp->GetMaxHealth());
+
+    AttributeComp->OnManaChanged.AddDynamic(this, &UHealthWidget::OnManaChanged);
+    UpdateManaDisplay(AttributeComp->GetMana(), AttributeComp->GetMaxMana());
 }
 
 void UHealthWidget::OnHealthChanged(float CurrentHealth, float MaxHealth, float Delta)
@@ -21,18 +25,39 @@ void UHealthWidget::OnHealthChanged(float CurrentHealth, float MaxHealth, float 
 
 }
 
+void UHealthWidget::OnManaChanged(float CurrentMana, float MaxMana, float Delta)
+{
+	UpdateManaDisplay(CurrentMana, MaxMana);
+}
+
 void UHealthWidget::UpdateHealthDisplay(float CurrentHealth, float MaxHealth)
 {
-	if (HealthBar)
+	if (Bar_Health)
 	{
-		HealthBar->SetPercent(CurrentHealth / MaxHealth);
+		Bar_Health->SetPercent(CurrentHealth / MaxHealth);
 	}
-	if (HealthText)
+	if (Text_Health)
     {
-        HealthText->SetText(FText::Format(
+            Text_Health->SetText(FText::Format(
             INVTEXT("{0} / {1}"),
             FMath::CeilToInt(CurrentHealth),
             FMath::CeilToInt(MaxHealth)
+        ));
+    }
+}
+
+void UHealthWidget::UpdateManaDisplay(float CurrentMana, float MaxMana)
+{
+	if (Bar_Mana)
+	{
+		Bar_Mana->SetPercent(CurrentMana / MaxMana);
+	}
+	if (Text_Mana)
+    {
+            Text_Mana->SetText(FText::Format(
+            INVTEXT("{0} / {1}"),
+            FMath::CeilToInt(CurrentMana),
+            FMath::CeilToInt(MaxMana)
         ));
     }
 }
@@ -42,6 +67,7 @@ void UHealthWidget::NativeDestruct()
 	if (BoundAttributeComp)
     {
         BoundAttributeComp->OnHealthChanged.RemoveDynamic(this, &UHealthWidget::OnHealthChanged);
+        BoundAttributeComp->OnManaChanged.RemoveDynamic(this, &UHealthWidget::OnManaChanged);
         BoundAttributeComp = nullptr;
     }
     Super::NativeDestruct();

@@ -123,6 +123,11 @@ void AAlexCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	}
 }
 
+void AAlexCharacter::SetOverlappingItem(AItem* Item)
+{
+	OverlappingItem = Item;
+}
+
 void AAlexCharacter::BeginPlay()
 {
 	Super::BeginPlay();

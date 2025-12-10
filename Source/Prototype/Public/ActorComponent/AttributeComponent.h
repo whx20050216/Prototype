@@ -18,18 +18,28 @@ public:
     //血量变化委托
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnHealthChanged, float, CurrentHealth, float, MaxHealth, float, Delta);
 
+    //蓝条变化委托
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnManaChanged, float, CurrentMana, float, MaxMana, float, Delta);
+
     //死亡委托
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDeath);
 
 	UPROPERTY(BlueprintAssignable, Category="Attributes")
     FOnHealthChanged OnHealthChanged;
 
+    UPROPERTY(BlueprintAssignable, Category="Attributes")
+    FOnManaChanged OnManaChanged;
+
 	UPROPERTY(BlueprintAssignable, Category="Attributes")
     FOnDeath OnDeath;
 
-	// 受击/治疗接口
+	// 血量变化接口
     UFUNCTION(BlueprintCallable, Category="Attributes")
     void ApplyHealthChange(float Delta);
+
+    // 蓝条变化接口
+    UFUNCTION(BlueprintCallable, Category="Attributes")
+    void ApplyManaChange(float Delta);
 
 	// 获取当前血量（供UI读取）
     UFUNCTION(BlueprintPure, Category="Attributes")
@@ -38,14 +48,26 @@ public:
     UFUNCTION(BlueprintPure, Category="Attributes")
     float GetMaxHealth() const { return MaxHealth; }
 
+    // 获取当前蓝条（供UI读取）
+    UFUNCTION(BlueprintPure, Category="Attributes")
+    float GetMana() const { return Mana; }
+
+    UFUNCTION(BlueprintPure, Category="Attributes")
+    float GetMaxMana() const { return MaxMana; }
     
 protected:
 	virtual void BeginPlay() override;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Health")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Attributes")
     float Health = 100.f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Health")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Attributes")
     float MaxHealth = 100.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Attributes")
+    float Mana = 100.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Attributes")
+    float MaxMana = 100.f;
 
 };
