@@ -9,6 +9,25 @@ ABaseCharacter::ABaseCharacter()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
+	LockPriority = 10.f;
+}
+
+FVector ABaseCharacter::GetTargetLocation_Implementation() const
+{
+	return GetActorLocation() + FVector(0.f, 0.f, 150.f);
+}
+
+float ABaseCharacter::GetLockPriority_Implementation() const
+{
+	return LockPriority;
+}
+
+void ABaseCharacter::OnLocked_Implementation(AController* Locker)
+{
+}
+
+void ABaseCharacter::OnUnlocked_Implementation(AController* Unlocker)
+{
 }
 
 void ABaseCharacter::PlayMontageSection(UAnimMontage* Montage, const FName& SectionName)

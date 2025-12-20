@@ -42,6 +42,8 @@ AAlexCharacter::AAlexCharacter()
 	WallDetection = CreateDefaultSubobject<UWallDetectionComponent>(TEXT("WallDetection"));
 
 	AttributeComponent = CreateDefaultSubobject<UAttributeComponent>(TEXT("AttributeComponent"));
+
+	LockPriority = 0.f;
 }
 
 void AAlexCharacter::Tick(float DeltaTime)

@@ -34,6 +34,6 @@ public:
 
 	// LockOnManager调用：当解锁时，敌人做什么？
 	UFUNCTION(BlueprintNativeEvent, Category="Target")
-	void OnUnlocked();
-	virtual void OnUnlocked_Implementation() {}
+	void OnUnlocked(AController* Unlocker);
+	virtual void OnUnlocked_Implementation(AController* Unlocker) {}
 };

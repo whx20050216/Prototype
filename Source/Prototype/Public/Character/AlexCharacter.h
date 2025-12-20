@@ -95,12 +95,21 @@ protected:
     UHealthWidget* HealthWidget;
 
 private:
-	
-
 	UPROPERTY(BlueprintReadOnly, Category="Input", meta = (AllowPrivateAccess = "true"))
 	bool bHasMovementInput = false;			// 是否有移动输入
 
-	/* 自动翻越参数*/
+	/*
+	* 镜头跟随目标
+	*/
+	UPROPERTY()
+	AActor* LockedTarget = nullptr;
+
+	UPROPERTY(EditAnywhere, Category="LockOn", meta=(ClampMin=1, ClampMax=20))
+	float CameraRotationSpeed = 8.f;
+
+	/* 
+	* 自动翻越参数
+	*/
 	UPROPERTY(BlueprintReadWrite, Category="Vault", meta=(AllowPrivateAccess="true"))
 	bool bIsVaulting = false;
 	
@@ -130,7 +139,9 @@ private:
 	float CalculateVaultHeight() const;     // 计算障碍物高度
 	FVector CalculateVaultVelocity();       // 动态计算跳跃速度
 
-	/* 墙跑参数 */
+	/* 
+	* 墙跑参数 
+	*/
 	UPROPERTY(BlueprintReadWrite, Category="WallRun", meta = (allowPrivateAccess = "true"))
 	bool bIsWallRunning = false;           // 是否正在墙跑
 
@@ -162,7 +173,9 @@ private:
 	void StopWallRun();
 	void UpdateWallRun(float DeltaTime);
 
-	/* 攀爬参数 */
+	/* 
+	* 攀爬参数 
+	*/
 	UPROPERTY(BlueprintReadWrite, Category="Climb", meta = (allowPrivateAccess = "true"))
 	bool bIsClimbing = false;           // 是否正在攀爬
 
@@ -189,7 +202,9 @@ private:
 	void StopClimb();
 	void UpdateClimb(float DeltaTime);
 
-	/* 滑翔参数 */
+	/* 
+	* 滑翔参数 
+	*/
 	UPROPERTY(EditAnywhere, Category="Glide", meta=(ClampMin=0.0))
 	float GlideDescentSpeed = 500.f;        // 滑翔下降初始速度
 
@@ -223,7 +238,9 @@ private:
 	void UpdateGlide(float DeltaTime);
 	bool CanGlide() const;
 
-	/* 奔跑参数 */
+	/* 
+	* 奔跑参数 
+	*/
 	UPROPERTY()
 	bool bHadInputLastFrame = false;   // 上一帧是否有移动输入
 	
@@ -231,7 +248,9 @@ private:
 	bool bRunActive = false;           // true=当前处于奔跑锁定状态
 
 
-	/* 蓄力跳参数 */
+	/* 
+	* 蓄力跳参数 
+	*/
 	UPROPERTY(EditAnywhere, Category="ChargeJump")
 	float MaxChargeTime = 1.2f;          // 满蓄力时长
 	
@@ -248,7 +267,9 @@ private:
 	void StartCharge();
 	void ExecuteChargeJump();
 
-	/* 冲刺参数 */
+	/* 
+	 *冲刺参数 
+	 */
 	UPROPERTY(EditAnywhere, Category="Dash")
 	float AirDashSpeed = 10000.f;		// 空中冲刺速度
 
