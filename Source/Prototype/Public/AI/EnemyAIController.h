@@ -14,6 +14,45 @@ class PROTOTYPE_API AEnemyAIController : public AAIController
 public:
 	AEnemyAIController();
 
+	// 移动决策函数
+	UFUNCTION(BlueprintCallable, Category="AI")
+	void MoveToTargetPlayer(float AcceptanceRadius = 150.0f);
+
+	// 停止移动
+	UFUNCTION(BlueprintCallable, Category="AI")
+	void StopMovingToPlayer();
+
+	// 黑板管理函数
+	UFUNCTION(BlueprintCallable, Category="AI|Blackboard")
+	void SetTargetPlayer(AActor* Player);
+
+	UFUNCTION(BlueprintCallable, Category="AI|Blackboard")
+	void ClearTargetPlayer();
+
+	UFUNCTION(BlueprintCallable, Category="AI|Blackboard")
+	void SetNoiseLocation(FVector Location);
+
+	UFUNCTION(BlueprintCallable, Category="AI|Blackboard")
+	void ClearNoiseLocation();
+
+	UFUNCTION(BlueprintCallable, Category="AI|Blackboard")
+	void SetIsAttacking(bool bAttacking);
+
+	UFUNCTION(BlueprintCallable, Category="AI|Blackboard")
+	bool GetIsAttacking() const;
+
+	// 黑板查询函数
+	UFUNCTION(BlueprintCallable, Category="AI|Blackboard")
+	bool HasTargetPlayer() const;
+
+	UFUNCTION(BlueprintCallable, Category="AI|Blackboard")
+	AActor* GetTargetPlayer() const;
+
+	// 攻击决策函数
+	UFUNCTION(BlueprintCallable, Category="AI")
+	void PerformAttackOnPlayer();
+
+
 protected:
 	virtual void OnPossess(APawn* InPawn) override;
     virtual void BeginPlay() override;

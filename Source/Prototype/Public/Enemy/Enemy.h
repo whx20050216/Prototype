@@ -16,16 +16,19 @@ class UBehaviorTree;
 UENUM(BlueprintType)
 enum class EAttackType : uint8
 {
-	Melee		UMETA(DisplayName = "近战攻击"),
-	Projectile	UMETA(DisplayName = "弹道攻击"),
-	Raycast		UMETA(DisplayName = "射线攻击")
+	Melee		UMETA(DisplayName = "melee attack"),
+	Projectile	UMETA(DisplayName = "Ballistic attack"),
+	Raycast		UMETA(DisplayName = "Ray attack")
 };
 
-// 攻击数据配置结构体
 USTRUCT(BlueprintType)
-struct FAttackData
+struct FAttackConfig
 {
 	GENERATED_BODY()
+
+	// 动画配置（使用BaseCharacter的通用结构）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat|Animation")
+	FCharacterAnimation Animation;
 
 	// 基础伤害
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
@@ -38,10 +41,6 @@ struct FAttackData
 	// 最大射程（远程攻击用）
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
 	float MaxRange = 150.0f;
-
-	// 攻击动画
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
-	UAnimMontage* AttackAnim = nullptr;
 
 	// 子弹类（仅弹道攻击用）
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta=(EditCondition="Type == EAttackType::Projectile"))
@@ -62,17 +61,14 @@ public:
 
 	// 暴露给行为树的工具函数
 	UFUNCTION(BlueprintCallable, Category="AI")
-    void MoveTowardPlayer(float AcceptanceRadius = 150.f);
-
-	UFUNCTION(BlueprintCallable, Category="AI")
-    void PerformAttack();
+    void ExecuteAttack();
 
 	UFUNCTION(BlueprintCallable, Category="AI")
     bool CanPerformAttack() const;
 
 	// 攻击配置（可以在蓝图中设置多组，行为树切换）
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
-	TArray<FAttackData> AttackConfigs;  // 支持多套攻击配置
+	TArray<FAttackConfig> AttackConfigs;  // 配置攻击
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
 	int32 CurrentAttackIndex = 0;  // 当前使用的攻击配置索引
@@ -93,6 +89,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI")
     UBehaviorTree* BehaviorTree;
 
+	// 工具函数
+	UFUNCTION(BlueprintCallable, Category="AI")
+	AActor* GetPlayerActor() const;
+
+	// 距离玩家的距离
+	UFUNCTION(BlueprintCallable, Category="AI")
+	float GetDistanceToPlayer() const;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -100,10 +104,13 @@ protected:
 	UFUNCTION()
     void OnSeePlayer(APawn* Pawn);
 
-	// 工具函数
-	UFUNCTION(BlueprintCallable, Category="AI")
-	AActor* GetPlayerActor() const;
+	// 同步AIController
+	virtual void PostLoad() override;
 
+	// 动画结束回调函数
+	UFUNCTION()
+	void OnAnimMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	
 private:
 	FTimerHandle PlayerVisibilityTimer;  // 检测玩家可见性的计时器
 	float PlayerVisibilityCheckInterval = 0.5f;  // 每0.5秒检查一次
@@ -113,13 +120,10 @@ private:
 	FTimerHandle AttackCooldownTimer;  // 冷却计时器
     bool bIsAttacking = false;         // 是否在攻击中
 
-	// 距离玩家的距离
-	float GetDistanceToPlayer() const;
-
 	// 三种攻击的执行函数
-	void ExecuteMeleeAttack(const FAttackData& Data);
-	void ExecuteProjectileAttack(const FAttackData& Data);
-	void ExecuteRaycastAttack(const FAttackData& Data);
+	void ExecuteMeleeAttack(const FAttackConfig& AttackConfig);
+	void ExecuteProjectileAttack(const FAttackConfig& AttackConfig);
+	void ExecuteRaycastAttack(const FAttackConfig& AttackConfig);
 
 	// 动画通知回调（需在动画中绑定）
 	UFUNCTION(BlueprintCallable, Category="Combat")

@@ -17,11 +17,14 @@ AEnemy::AEnemy()
 	PawnSensing->SightRadius = 2000.f;		//2000.f为视野半径
 	PawnSensing->SetPeripheralVisionAngle(50.f);	// 100度总视野
 
-	// 默认配置：近战攻击
-	FAttackData DefaultAttack;
-	DefaultAttack.Type = EAttackType::Melee;
+	// 使用新的攻击配置结构初始化
+	FAttackConfig DefaultAttack;
+	DefaultAttack.Animation.Montage = nullptr;  // 在蓝图中配置
+	DefaultAttack.Animation.SectionName = "Attack";
+	DefaultAttack.Animation.PlayRate = 1.0f;
 	DefaultAttack.Damage = 10.0f;
 	DefaultAttack.MaxRange = 150.0f;
+	DefaultAttack.Type = EAttackType::Melee;
 	AttackConfigs.Add(DefaultAttack);
 
 	// 指定AIController类
@@ -29,46 +32,11 @@ AEnemy::AEnemy()
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 }
 
-void AEnemy::MoveTowardPlayer(float AcceptanceRadius)
+void AEnemy::ExecuteAttack()
 {
-	if (!BlackboardComp) return;
-
-	UObject* Target = BlackboardComp->GetValueAsObject("TargetPlayer");
-	if (!Target) return;
-	// 1.获取玩家Actor引用
-	if (AActor* Player = Cast<AActor>(Target))
-	{
-		// 2. 获取敌人的 AI 控制器
-		if (AAIController* AIController = Cast<AAIController>(GetController()))
-        {
-			// 3. 发送移动指令
-            AIController->MoveToActor(Player, AcceptanceRadius);
-        }
-	}
-}
-
-void AEnemy::PerformAttack()
-{
-	if (!CanPerformAttack()) return;
-
 	if (AttackConfigs.Num() == 0) return;
 
-	FAttackData CurrentAttack = AttackConfigs[CurrentAttackIndex];
-	float Distance = GetDistanceToPlayer();
-
-	if (Distance > CurrentAttack.MaxRange) return;
-
-	bIsAttacking = true;
-
-	if (CurrentAttack.AttackAnim)
-	{
-		PlayMontageSection(CurrentAttack.AttackAnim, "Attack");
-	}
-
-	if (BlackboardComp)
-	{
-		BlackboardComp->SetValueAsBool("IsAttacking", true);
-	}
+	const FAttackConfig& CurrentAttack = AttackConfigs[CurrentAttackIndex];
 
 	switch (CurrentAttack.Type)
 	{
@@ -106,6 +74,9 @@ void AEnemy::BeginPlay()
 	{
 		PawnSensing->OnSeePawn.AddDynamic(this, &AEnemy::OnSeePlayer);
 	}
+
+	// 绑定动画结束事件
+	OnMontageEnded.AddDynamic(this, &AEnemy::OnAnimMontageEnded);
 }
 
 void AEnemy::OnSeePlayer(APawn* Pawn)
@@ -114,9 +85,10 @@ void AEnemy::OnSeePlayer(APawn* Pawn)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Find Player")));
 
-		if (BlackboardComp)
+		if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
 		{
-			BlackboardComp->SetValueAsObject("TargetPlayer", Player);
+			// 调用Controller的Set函数
+			AIController->SetTargetPlayer(Player);
 			GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Set TargetPlayer")));
 
 			// 启动持续检测计时器
@@ -127,7 +99,29 @@ void AEnemy::OnSeePlayer(APawn* Pawn)
 				PlayerVisibilityCheckInterval,
 				true  // 循环执行
 			);
+
+			// 通知Controller做决策（移动）
+			AIController->MoveToTargetPlayer(150.f);
 		}
+	}
+}
+
+void AEnemy::PostLoad()
+{
+	Super::PostLoad();
+
+	if (AIControllerClass != AEnemyAIController::StaticClass())
+	{
+		AIControllerClass = AEnemyAIController::StaticClass();
+	}
+}
+
+void AEnemy::OnAnimMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	bIsAttacking = false;
+	if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+	{
+		AIController->SetIsAttacking(false);
 	}
 }
 
@@ -138,11 +132,8 @@ AActor* AEnemy::GetPlayerActor() const
 
 void AEnemy::CheckPlayerVisibility()
 {
-	if (!BlackboardComp || !PawnSensing)
-	{
-		GetWorld()->GetTimerManager().ClearTimer(PlayerVisibilityTimer);
-		return;
-	}
+	if (!PawnSensing) return;
+
 	// 从黑板获取当前目标
 	UObject* Target = BlackboardComp->GetValueAsObject("TargetPlayer");
 	if (!Target)
@@ -153,29 +144,13 @@ void AEnemy::CheckPlayerVisibility()
 	}
 
 	APawn* PlayerPawn = Cast<APawn>(Target);
-	if (!PlayerPawn)
-	{
-		BlackboardComp->ClearValue("TargetPlayer");
-		GetWorld()->GetTimerManager().ClearTimer(PlayerVisibilityTimer);
-		return;
-	}
-
-	// 关键：检查是否仍然能看到玩家
 	if (!PawnSensing->CouldSeePawn(PlayerPawn))
 	{
-		// 看不到了，清除目标
-		BlackboardComp->ClearValue("TargetPlayer");
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Lost Player"));
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("Clear TargetPlayer"));
-
-		// 停止移动
-		if (AAIController* AIController = Cast<AAIController>(GetController()))
+		if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
 		{
-			AIController->StopMovement();
-			GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("停止移动"));
+			AIController->ClearTargetPlayer();// Controller清除记忆
+			AIController->StopMovingToPlayer();
 		}
-
-		// 清除计时器
 		GetWorld()->GetTimerManager().ClearTimer(PlayerVisibilityTimer);
 	}
 	// 如果还能看见，计时器会继续运行，下次再检查
@@ -190,14 +165,14 @@ float AEnemy::GetDistanceToPlayer() const
 	return FLT_MAX;
 }
 
-void AEnemy::ExecuteMeleeAttack(const FAttackData& Data)
+void AEnemy::ExecuteMeleeAttack(const FAttackConfig& AttackConfig)
 {
 	UE_LOG(LogTemp, Log, TEXT("近战攻击：等待 AnimNotify 触发伤害"));
 }
 
-void AEnemy::ExecuteProjectileAttack(const FAttackData& Data)
+void AEnemy::ExecuteProjectileAttack(const FAttackConfig& AttackConfig)
 {
-	if (!Data.ProjectileClass) return;
+	if (!AttackConfig.ProjectileClass) return;
 
 	if (AActor* Player = GetPlayerActor())
 	{
@@ -218,7 +193,7 @@ void AEnemy::ExecuteProjectileAttack(const FAttackData& Data)
 		SpawnParams.Owner = this;
 
 		AProjectile* Projectile = GetWorld()->SpawnActor<AProjectile>(
-			Data.ProjectileClass,
+			AttackConfig.ProjectileClass,
 			MuzzleLocation,
 			MuzzleRotation,
 			SpawnParams
@@ -226,18 +201,18 @@ void AEnemy::ExecuteProjectileAttack(const FAttackData& Data)
 
 		if (Projectile)
 		{
-			Projectile->Damage = Data.Damage;
-			UE_LOG(LogTemp, Log, TEXT("生成子弹：伤害=%.0f"), Data.Damage);
+			Projectile->Damage = AttackConfig.Damage;
+			UE_LOG(LogTemp, Log, TEXT("生成子弹：伤害=%.0f"), AttackConfig.Damage);
 		}
 	}
 }
 
-void AEnemy::ExecuteRaycastAttack(const FAttackData& Data)
+void AEnemy::ExecuteRaycastAttack(const FAttackConfig& AttackConfig)
 {
 	if (AActor* Player = GetPlayerActor())
 	{
 		FVector Start = GetActorLocation() + FVector(0, 0, 50);
-		FVector End = Start + GetActorForwardVector() * Data.MaxRange;
+		FVector End = Start + GetActorForwardVector() * AttackConfig.MaxRange;
 
 		FCollisionQueryParams QueryParams;
 		QueryParams.AddIgnoredActor(this);
@@ -257,12 +232,12 @@ void AEnemy::ExecuteRaycastAttack(const FAttackData& Data)
 		{
 			UGameplayStatics::ApplyDamage(
 				Player,
-				Data.Damage,
+				AttackConfig.Damage,
 				GetController(),
 				this,
 				UDamageType::StaticClass()
 			);
-			UE_LOG(LogTemp, Log, TEXT("射线命中玩家，伤害=%.0f"), Data.Damage);
+			UE_LOG(LogTemp, Log, TEXT("射线命中玩家，伤害=%.0f"), AttackConfig.Damage);
 			DrawDebugSphere(GetWorld(), HitResult.Location, 20.0f, 12, FColor::Green, false, 2.0f);
 		}
 	}
@@ -295,9 +270,8 @@ void AEnemy::OnAttackHit()
 void AEnemy::OnAttackCooldownEnd()
 {
 	bIsAttacking = false;
-	if (BlackboardComp)
+	if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
 	{
-		BlackboardComp->SetValueAsBool("IsAttacking", false);
-		BlackboardComp->ClearValue("AttackHit");
+		AIController->SetIsAttacking(false);
 	}
 }
