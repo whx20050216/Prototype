@@ -97,6 +97,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="AI")
 	float GetDistanceToPlayer() const;
 
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	void SetAttackType(EAttackType Type);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -118,6 +121,8 @@ private:
 	void CheckPlayerVisibility();  // 检查是否还能看见玩家
 
 	FTimerHandle AttackCooldownTimer;  // 冷却计时器
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat", meta = (AllowPrivateAccess = "true"))
     bool bIsAttacking = false;         // 是否在攻击中
 
 	// 三种攻击的执行函数

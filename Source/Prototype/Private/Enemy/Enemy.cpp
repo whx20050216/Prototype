@@ -165,13 +165,28 @@ float AEnemy::GetDistanceToPlayer() const
 	return FLT_MAX;
 }
 
+void AEnemy::SetAttackType(EAttackType Type)
+{
+	for (int32 i = 0; i < AttackConfigs.Num(); i++)
+    {
+        if (AttackConfigs[i].Type == Type)
+        {
+            CurrentAttackIndex = i;
+            return;
+        }
+    }
+    
+    // 如果没找到对应配置，默认使用第一个
+    CurrentAttackIndex = 0;
+}
+
 void AEnemy::ExecuteMeleeAttack(const FAttackConfig& AttackConfig)
 {
-	UE_LOG(LogTemp, Log, TEXT("近战攻击：等待 AnimNotify 触发伤害"));
+	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Execute Melee Attack")));
 }
 
 void AEnemy::ExecuteProjectileAttack(const FAttackConfig& AttackConfig)
-{
+{	
 	if (!AttackConfig.ProjectileClass) return;
 
 	if (AActor* Player = GetPlayerActor())
