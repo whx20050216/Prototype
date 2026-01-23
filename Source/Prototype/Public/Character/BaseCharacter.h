@@ -12,6 +12,14 @@ class UWidgetComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCharacterMontageEnded, UAnimMontage*, Montage, bool, bInterrupted);
 
+UENUM(BlueprintType)
+enum class ESectionPlayMode : uint8
+{
+	Single UMETA(DisplayName = "Single Play"),
+	Random UMETA(DisplayName = "Random Play"),
+	Sequential UMETA(DisplayName = "Sequential Play")
+};
+
 // 通用的动画配置结构体
 USTRUCT(BlueprintType)
 struct FCharacterAnimation
@@ -22,9 +30,21 @@ struct FCharacterAnimation
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation")
 	UAnimMontage* Montage = nullptr;
 
-	// 默认播放段落（可留空，播放整个蒙太奇）
+	// 单个Section
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation")
 	FName SectionName = NAME_None;
+
+	// Section序列
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation",meta=(EditCondition="bUseSectionSequence"))
+	TArray<FName> SectionSequence;
+
+	// 是否使用Section序列
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	bool bUseSectionSequence = false;
+
+	// 播放模式
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation", meta=(EditCondition="bUseSectionSequence"))
+	ESectionPlayMode PlayMode = ESectionPlayMode::Sequential;
 
 	// 播放速率
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation", meta=(ClampMin = 0.1))
@@ -33,12 +53,7 @@ struct FCharacterAnimation
 	// 是否循环
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation")
 	bool bLoop = false;
-
-	// 播放权重（用于随机选择）
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation", meta=(ClampMin = 0.0))
-	float PlayWeight = 1.0f;
 };
-
 
 UCLASS()
 class PROTOTYPE_API ABaseCharacter : public ACharacter, public ITargetableInterface
@@ -48,10 +63,15 @@ class PROTOTYPE_API ABaseCharacter : public ACharacter, public ITargetableInterf
 public:
 	ABaseCharacter();
 
+	// ITargetableInterface实现
 	virtual FVector GetTargetLocation_Implementation() const override;
     virtual float GetLockPriority_Implementation() const override;
     virtual void OnLocked_Implementation(AController* Locker) override;
     virtual void OnUnlocked_Implementation(AController* Unlocker) override;
+
+	// 虚函数：子类重写，动画蓝图通过AnimNotify调用
+	UFUNCTION(BlueprintNativeEvent, Category="Animation")
+	void AttackEnd();
 
 	// 子类可以Override的配置
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Target")
@@ -60,9 +80,22 @@ public:
 	// 播放蒙太奇（子类可重写，支持自定义逻辑）
 	virtual void PlayMontageSection(UAnimMontage* Montage, const FName& SectionName, float PlayRate = 1.0f);
 
-	// 便捷的动画播放接口（自动处理空检查）
+	// 随机播放蒙太奇Section
+	void PlayRandomMontageSection(UAnimMontage* Montage, const TArray<FName>& SectionSequence, float PlayRate = 1.0f);
+
+	// 顺序播放蒙太奇Section
+	void PlaySequentialMontageSections(UAnimMontage* Montage, float PlayRate = 1.0f);
+
+	// 获取下一个Section
+	int32 GetNextSectionIndex() const;
+
+	// 单个section动画播放接口（自动处理空检查）
 	UFUNCTION(BlueprintCallable, Category="Animation")
 	void PlayAnimation(UAnimMontage* Montage, FName SectionName = NAME_None, float PlayRate = 1.0f);
+
+	// 多个section动画播放接口
+	UFUNCTION(BlueprintCallable, Category="Animation")
+	void PlayAnimationWithSections(UAnimMontage* Montage, const TArray<FName>& SectionSequence, float PlayRate = 1.0f);
 
 	// 检查是否正在播放蒙太奇（带段落名检查）
 	UFUNCTION(BlueprintCallable, Category="Animation")
@@ -78,6 +111,20 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+
+	// 当前Section
+	UPROPERTY(BlueprintReadOnly, Category="Animation", meta=(AllowPrivateAccess="true"))
+	int32 CurrentSectionIndex = -1;
+
+	// 连招超时定时器
+	FTimerHandle ComboTimerHandle;
+	static constexpr float ComboTimeout = 1.0f;
+
+	// 定时器回调
+	void OnComboTimeout();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation")
+	FCharacterAnimation AnimationConfig;
 
 	// UFUNCTION：绑定到动画实例的委托
 	UFUNCTION()
