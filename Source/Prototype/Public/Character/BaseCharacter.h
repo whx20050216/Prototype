@@ -123,7 +123,7 @@ protected:
 	// 定时器回调
 	void OnComboTimeout();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation")
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadWrite, Category="Animation")
 	FCharacterAnimation AnimationConfig;
 
 	// UFUNCTION：绑定到动画实例的委托

@@ -34,6 +34,10 @@ struct FAttackConfig
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
 	float Damage = 10.0f;
 
+	// 攻击间隔
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta=(ToolTip="Seconds before next attack. <=0 = use animation length instead"))
+	float AttackCooldown = 2.0f;
+
 	// 攻击类型
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
 	EAttackType Type = EAttackType::Melee;
@@ -41,6 +45,10 @@ struct FAttackConfig
 	// 最大射程（远程攻击用）
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
 	float MaxRange = 150.0f;
+
+	// 与目标的可接受距离
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
+	float AcceptanceRadius = 150.0f;
 
 	// 子弹类（仅弹道攻击用）
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta=(EditCondition="Type == EAttackType::Projectile"))
@@ -72,10 +80,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
 	int32 CurrentAttackIndex = 0;  // 当前使用的攻击配置索引
-
-	// 基础属性
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
-	float AttackCooldown = 2.0f;
 
 	// AI感知组件
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AI")

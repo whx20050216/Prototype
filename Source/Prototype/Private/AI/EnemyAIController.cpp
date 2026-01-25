@@ -169,6 +169,9 @@ void AEnemyAIController::PerformAttackOnPlayer()
     // 决策3：检查冷却
     if (!Enemy->CanPerformAttack()) return;
 
+    // 设置焦点：让AI面朝目标
+    SetFocus(Target);
+
     // 决策4：所有条件满足，攻击
     SetIsAttacking(true);
     Enemy->ExecuteAttack();

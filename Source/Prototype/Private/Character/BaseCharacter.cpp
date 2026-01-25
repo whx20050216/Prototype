@@ -152,6 +152,10 @@ void ABaseCharacter::PlayAnimationWithSections(UAnimMontage* Montage, const TArr
 	{
 		PlaySequentialMontageSections(Montage, PlayRate);
 	}
+	else
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Invalid PlayMode"));
+	}
 }
 
 bool ABaseCharacter::IsPlayingMontage(UAnimMontage* Montage, FName SectionName) const

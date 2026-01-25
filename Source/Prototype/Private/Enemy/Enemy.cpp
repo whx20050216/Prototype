@@ -15,17 +15,7 @@ AEnemy::AEnemy()
 {
 	PawnSensing = CreateDefaultSubobject<UPawnSensingComponent>(TEXT("PawnSensing"));
 	PawnSensing->SightRadius = 2000.f;		//2000.f为视野半径
-	PawnSensing->SetPeripheralVisionAngle(50.f);	// 100度总视野
-
-	// 使用新的攻击配置结构初始化
-	FAttackConfig DefaultAttack;
-	DefaultAttack.Animation.Montage = nullptr;  // 在蓝图中配置
-	DefaultAttack.Animation.SectionName = "Attack";
-	DefaultAttack.Animation.PlayRate = 1.0f;
-	DefaultAttack.Damage = 10.0f;
-	DefaultAttack.MaxRange = 150.0f;
-	DefaultAttack.Type = EAttackType::Melee;
-	AttackConfigs.Add(DefaultAttack);
+	PawnSensing->SetPeripheralVisionAngle(60.f);	// 100度总视野
 
 	// 指定AIController类
 	AIControllerClass = AEnemyAIController::StaticClass();
@@ -35,6 +25,13 @@ AEnemy::AEnemy()
 void AEnemy::ExecuteAttack()
 {
 	if (AttackConfigs.Num() == 0) return;
+
+	// 立即锁定攻击状态，防止重复触发
+	bIsAttacking = true;
+    if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+    {
+        AIController->SetIsAttacking(true);
+    }
 
 	const FAttackConfig& CurrentAttack = AttackConfigs[CurrentAttackIndex];
 
@@ -51,13 +48,16 @@ void AEnemy::ExecuteAttack()
 			break;
 	}
 
-	GetWorld()->GetTimerManager().SetTimer(
+	if (CurrentAttack.AttackCooldown > 0.0f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(
 		AttackCooldownTimer,
 		this,
 		&AEnemy::OnAttackCooldownEnd,
-		AttackCooldown,
+		CurrentAttack.AttackCooldown,
 		false
-	);
+		);
+	}
 }
 
 bool AEnemy::CanPerformAttack() const
@@ -88,9 +88,12 @@ void AEnemy::OnSeePlayer(APawn* Pawn)
 		if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
 		{
 			// 调用Controller的Set函数
-			AIController->SetTargetPlayer(Player);
-			GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Set TargetPlayer")));
-
+			if (!AIController->HasTargetPlayer())
+			{
+				AIController->SetTargetPlayer(Player);
+				GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Set TargetPlayer")));
+			}
+			
 			// 启动持续检测计时器
 			GetWorld()->GetTimerManager().SetTimer(
 				PlayerVisibilityTimer,
@@ -101,7 +104,26 @@ void AEnemy::OnSeePlayer(APawn* Pawn)
 			);
 
 			// 通知Controller做决策（移动）
-			AIController->MoveToTargetPlayer(150.f);
+			if (GetDistanceToPlayer() > AttackConfigs[CurrentAttackIndex].MaxRange)
+			{
+				if (IsPlayingMontage(AttackConfigs[CurrentAttackIndex].Animation.Montage, AttackConfigs[CurrentAttackIndex].Animation.SectionName))
+				{
+					if (AttackConfigs[CurrentAttackIndex].Type == EAttackType::Melee)
+					{
+						return;
+					}
+					else
+					{
+						StopAllMontages();
+						AIController->MoveToTargetPlayer(AttackConfigs[CurrentAttackIndex].AcceptanceRadius);
+					}
+				}
+				else
+				{
+					StopAllMontages();
+					AIController->MoveToTargetPlayer(AttackConfigs[CurrentAttackIndex].AcceptanceRadius);
+				}
+			}
 		}
 	}
 }
@@ -122,6 +144,7 @@ void AEnemy::OnAnimMontageEnded(UAnimMontage* Montage, bool bInterrupted)
 	if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
 	{
 		AIController->SetIsAttacking(false);
+		AIController->ClearFocus(EAIFocusPriority::Gameplay);// 清除焦点
 	}
 }
 
@@ -160,7 +183,7 @@ float AEnemy::GetDistanceToPlayer() const
 {
 	if (AActor* Player = GetPlayerActor())
 	{
-		return FVector::Dist(GetActorLocation(), Player->GetActorLocation());
+		return FVector::Dist2D(GetActorLocation(), Player->GetActorLocation());
 	}
 	return FLT_MAX;
 }
@@ -175,7 +198,6 @@ void AEnemy::SetAttackType(EAttackType Type)
             return;
         }
     }
-    
     // 如果没找到对应配置，默认使用第一个
     CurrentAttackIndex = 0;
 }
@@ -183,6 +205,8 @@ void AEnemy::SetAttackType(EAttackType Type)
 void AEnemy::ExecuteMeleeAttack(const FAttackConfig& AttackConfig)
 {
 	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Execute Melee Attack")));
+	AnimationConfig = AttackConfig.Animation;
+	PlayAnimationWithSections(AttackConfig.Animation.Montage, AttackConfig.Animation.SectionSequence, AttackConfig.Animation.PlayRate);
 }
 
 void AEnemy::ExecuteProjectileAttack(const FAttackConfig& AttackConfig)
@@ -214,10 +238,12 @@ void AEnemy::ExecuteProjectileAttack(const FAttackConfig& AttackConfig)
 			SpawnParams
 		);
 
+		PlayAnimation(AttackConfig.Animation.Montage, AttackConfig.Animation.SectionName, AttackConfig.Animation.PlayRate);
+
 		if (Projectile)
 		{
 			Projectile->Damage = AttackConfig.Damage;
-			UE_LOG(LogTemp, Log, TEXT("生成子弹：伤害=%.0f"), AttackConfig.Damage);
+			GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Spawn Projectile,Damage=%.0f"), AttackConfig.Damage));
 		}
 	}
 }
@@ -252,7 +278,6 @@ void AEnemy::ExecuteRaycastAttack(const FAttackConfig& AttackConfig)
 				this,
 				UDamageType::StaticClass()
 			);
-			UE_LOG(LogTemp, Log, TEXT("射线命中玩家，伤害=%.0f"), AttackConfig.Damage);
 			DrawDebugSphere(GetWorld(), HitResult.Location, 20.0f, 12, FColor::Green, false, 2.0f);
 		}
 	}
