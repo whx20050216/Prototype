@@ -61,6 +61,10 @@ protected:
 	void RUN();
 	void DASH();
 	void CLIMB();
+	void ATTACK();
+
+	// 重写父类AttackEnd
+	virtual void AttackEnd() override;
 
 	UFUNCTION()
 	void DashEnd();
@@ -97,6 +101,12 @@ protected:
 private:
 	UPROPERTY(BlueprintReadOnly, Category="Input", meta = (AllowPrivateAccess = "true"))
 	bool bHasMovementInput = false;			// 是否有移动输入
+
+	/*
+	* 战斗相关
+	*/
+	UPROPERTY()
+    bool bIsAttacking = false;  // 攻击状态锁，不依赖动画系统
 
 	/*
 	* 镜头跟随目标
@@ -316,6 +326,9 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
 	UInputAction* ClimbAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
+	UInputAction* AttackAction;
 
 	UPROPERTY(VisibleAnywhere)
 	AItem* OverlappingItem;

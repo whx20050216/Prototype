@@ -122,6 +122,7 @@ void AAlexCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		EnhancedInputComponent->BindAction(RunAction, ETriggerEvent::Triggered, this, &AAlexCharacter::RUN);
 		EnhancedInputComponent->BindAction(DashAction, ETriggerEvent::Started, this, &AAlexCharacter::DASH);
 		EnhancedInputComponent->BindAction(ClimbAction, ETriggerEvent::Started, this, &AAlexCharacter::CLIMB);
+		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AAlexCharacter::ATTACK);
 	}
 }
 
@@ -319,6 +320,14 @@ void AAlexCharacter::CLIMB()
 	{
 		StartClimb();
 	}
+}
+
+void AAlexCharacter::ATTACK()
+{
+	if (bIsAttacking) return;
+	bIsAttacking = true;
+	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("ATTACK")));
+	PlayAnimationWithSections(AnimationConfig.Montage, AnimationConfig.SectionSequence, AnimationConfig.PlayRate);
 }
 
 void AAlexCharacter::TryAutoVault()
@@ -884,6 +893,13 @@ bool AAlexCharacter::ConsumeDashIfAvailable()
 		}
 	}
 	return false;
+}
+
+void AAlexCharacter::AttackEnd()
+{
+	Super::AttackEnd();
+
+	bIsAttacking = false;
 }
 
 void AAlexCharacter::DashEnd()

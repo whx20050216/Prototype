@@ -52,7 +52,7 @@ void ABaseCharacter::OnUnlocked_Implementation(AController* Unlocker)
 {
 }
 
-void ABaseCharacter::AttackEnd_Implementation()
+void ABaseCharacter::AttackEnd()
 {
 	// 只有Sequential模式才处理
     if (AnimationConfig.PlayMode != ESectionPlayMode::Sequential)
@@ -71,13 +71,7 @@ void ABaseCharacter::AttackEnd_Implementation()
 	else
 	{
 		CurrentSectionIndex = NextIndex;
-		FName NextSection = AnimationConfig.SectionSequence[CurrentSectionIndex];
-
-		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-		if (AnimInstance)
-		{
-			AnimInstance->Montage_JumpToSection(NextSection, AnimationConfig.Montage);
-		}
+		
 		//重置定时器
 		GetWorldTimerManager().ClearTimer(ComboTimerHandle);
         GetWorldTimerManager().SetTimer(ComboTimerHandle, this, &ABaseCharacter::OnComboTimeout, ComboTimeout, false);
@@ -119,7 +113,10 @@ void ABaseCharacter::PlaySequentialMontageSections(UAnimMontage* Montage, float 
 	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
     if (!AnimInstance) return;
 
-	CurrentSectionIndex = 0;
+	if (CurrentSectionIndex == -1)
+    {
+        CurrentSectionIndex = 0;
+    }
     FName FirstSection = AnimationConfig.SectionSequence[CurrentSectionIndex];
 	PlayMontageSection(Montage, FirstSection, PlayRate);
 

@@ -128,6 +128,10 @@ void AEnemy::OnSeePlayer(APawn* Pawn)
 	}
 }
 
+/*
+* UObject 生命周期函数：对象从磁盘加载完成后由引擎自动调用
+* 强制使用 AEnemyAIController，防止蓝图配置错误（会覆盖蓝图设置）
+*/
 void AEnemy::PostLoad()
 {
 	Super::PostLoad();

@@ -69,9 +69,9 @@ public:
     virtual void OnLocked_Implementation(AController* Locker) override;
     virtual void OnUnlocked_Implementation(AController* Unlocker) override;
 
-	// 虚函数：子类重写，动画蓝图通过AnimNotify调用
-	UFUNCTION(BlueprintNativeEvent, Category="Animation")
-	void AttackEnd();
+	// AttackEnd
+	UFUNCTION(BlueprintCallable, Category="Animation")
+	virtual void AttackEnd();
 
 	// 子类可以Override的配置
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Target")
@@ -123,7 +123,7 @@ protected:
 	// 定时器回调
 	void OnComboTimeout();
 
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadWrite, Category="Animation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation")
 	FCharacterAnimation AnimationConfig;
 
 	// UFUNCTION：绑定到动画实例的委托
