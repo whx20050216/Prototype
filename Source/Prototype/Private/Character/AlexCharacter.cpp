@@ -902,6 +902,21 @@ void AAlexCharacter::AttackEnd()
 	bIsAttacking = false;
 }
 
+float AAlexCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
+{
+	float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+
+	if (AttributeComponent && ActualDamage > 0.f)
+	{
+		AttributeComponent->ApplyHealthChange(-ActualDamage);
+		if (AttributeComponent->GetHealth() <= 0.f)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Health is zero")));
+		}
+	}
+	return ActualDamage;
+}
+
 void AAlexCharacter::DashEnd()
 {
 	GetCharacterMovement()->Velocity *= 0.2f;

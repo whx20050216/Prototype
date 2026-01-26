@@ -66,6 +66,8 @@ protected:
 	// 重写父类AttackEnd
 	virtual void AttackEnd() override;
 
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
+
 	UFUNCTION()
 	void DashEnd();
 

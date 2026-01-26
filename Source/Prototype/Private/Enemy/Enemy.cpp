@@ -220,9 +220,11 @@ void AEnemy::ExecuteProjectileAttack(const FAttackConfig& AttackConfig)
 	if (AActor* Player = GetPlayerActor())
 	{
 		//发射点偏移，避免从地面射出
-		FVector MuzzleLocation = GetActorLocation() + FVector(0, 0, 50);
+		FVector MuzzleLocation = GetActorLocation() + GetActorForwardVector() * 150.f + FVector(0, 0, 50);
 		//计算从枪口到玩家的旋转角，让子弹"瞄准"玩家
-		FRotator MuzzleRotation = (Player->GetActorLocation() - MuzzleLocation).Rotation();
+		FVector TargetLocation = Player->GetActorLocation();
+		TargetLocation.Z = MuzzleLocation.Z;
+		FRotator MuzzleRotation = (TargetLocation - MuzzleLocation).Rotation();
 
 		/*
 		* AdjustIfPossibleButAlwaysSpawn	尝试微调位置避开碰撞，但必定生成（可能卡在墙里）
