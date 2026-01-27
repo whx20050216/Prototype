@@ -91,6 +91,8 @@ void AAlexCharacter::Tick(float DeltaTime)
 	{
 		UpdateWallRun(DeltaTime);
 	}
+
+	UpdateCameraOffset(DeltaTime);
 }
 
 void AAlexCharacter::ResetRun()
@@ -129,6 +131,30 @@ void AAlexCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 void AAlexCharacter::SetOverlappingItem(AItem* Item)
 {
 	OverlappingItem = Item;
+}
+
+void AAlexCharacter::CameraShakeOffset(float OffsetZ, float Duration, float LiftSpeed)
+{
+	// 应用偏移
+    CurrentCameraOffsetZ = OffsetZ;
+    
+    // 设置回弹速度（供Tick使用）
+    GlideCameraLiftSpeed = LiftSpeed;
+    
+    // 清除之前的计时器
+    GetWorld()->GetTimerManager().ClearTimer(CameraLiftTimer);
+    
+    // 启动计时器，到期后触发回弹
+    GetWorld()->GetTimerManager().SetTimer(
+        CameraLiftTimer,
+        [this]()
+        {
+            // 目标设为0，触发Tick中的回弹插值
+            CurrentCameraOffsetZ = 0.f;
+        },
+        Duration,
+        false
+    );
 }
 
 void AAlexCharacter::BeginPlay()
@@ -736,6 +762,9 @@ void AAlexCharacter::StartGlide()
 	FVector Forward = GetActorForwardVector();
     CurrentVelocity.X = Forward.X * CurrentSpeed;
     CurrentVelocity.Y = Forward.Y * CurrentSpeed;
+	CurrentVelocity.Z = InitialGlideUpwardSpeed;
+
+	CameraShakeOffset(GlideCameraOffsetZ, GlideCameraLiftDuration, GlideCameraLiftSpeed);
 
 	GetCharacterMovement()->Velocity = CurrentVelocity;
 }
@@ -755,6 +784,11 @@ void AAlexCharacter::StopGlide()
         AnimInst->GlideTilt = 0.f;
     }
 	CurrentGlideDescentSpeed = GlideDescentSpeed;// 重置为初始下降速度
+
+	//重置摄像机
+	CurrentCameraOffsetZ = 0.f;
+    SpringArm->SocketOffset.Z = 0.f;
+    GetWorld()->GetTimerManager().ClearTimer(CameraLiftTimer);
 }
 
 void AAlexCharacter::UpdateGlide(float DeltaTime)
@@ -893,6 +927,23 @@ bool AAlexCharacter::ConsumeDashIfAvailable()
 		}
 	}
 	return false;
+}
+
+void AAlexCharacter::UpdateCameraOffset(float DeltaTime)
+{
+	// 使用 FMath::FInterpTo 替代手动插值
+    float TargetOffsetZ = CurrentCameraOffsetZ;
+    float CurrentOffsetZ = SpringArm->SocketOffset.Z;
+    
+    // 关键：使用引擎内置的平滑插值函数
+    float NewOffsetZ = FMath::FInterpTo(
+        CurrentOffsetZ, 
+        TargetOffsetZ, 
+        DeltaTime, 
+        GlideCameraLiftSpeed
+    );
+    
+    SpringArm->SocketOffset.Z = NewOffsetZ;
 }
 
 void AAlexCharacter::AttackEnd()

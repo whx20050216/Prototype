@@ -163,8 +163,11 @@ void AEnemyAIController::PerformAttackOnPlayer()
 
     // 决策2：检查距离
     float Distance = Enemy->GetDistanceToPlayer();
-    FAttackConfig CurrentAttack = Enemy->AttackConfigs[Enemy->CurrentAttackIndex];
-    if (Distance > CurrentAttack.MaxRange) return;
+    const FAttackConfig& CurrentAttack = Enemy->AttackConfigs[Enemy->CurrentAttackIndex];
+	float AttackRange = (CurrentAttack.Type == EAttackType::Melee) 
+        ? CurrentAttack.MeleeRange 
+        : CurrentAttack.MaxRange;
+    if (Distance > AttackRange) return;
 
     // 决策3：检查冷却
     if (!Enemy->CanPerformAttack()) return;

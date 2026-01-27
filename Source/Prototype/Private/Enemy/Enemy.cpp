@@ -103,25 +103,28 @@ void AEnemy::OnSeePlayer(APawn* Pawn)
 				true  // 循环执行
 			);
 
+			const FAttackConfig& Config = AttackConfigs[CurrentAttackIndex];
+			float AttackRange = (Config.Type == EAttackType::Melee) ? Config.MeleeRange : Config.MaxRange;
+
 			// 通知Controller做决策（移动）
-			if (GetDistanceToPlayer() > AttackConfigs[CurrentAttackIndex].MaxRange)
+			if (GetDistanceToPlayer() > AttackRange)
 			{
-				if (IsPlayingMontage(AttackConfigs[CurrentAttackIndex].Animation.Montage, AttackConfigs[CurrentAttackIndex].Animation.SectionName))
+				if (IsPlayingMontage(Config.Animation.Montage, Config.Animation.SectionName))
 				{
-					if (AttackConfigs[CurrentAttackIndex].Type == EAttackType::Melee)
+					if (Config.Type == EAttackType::Melee)
 					{
 						return;
 					}
 					else
 					{
 						StopAllMontages();
-						AIController->MoveToTargetPlayer(AttackConfigs[CurrentAttackIndex].AcceptanceRadius);
+						AIController->MoveToTargetPlayer(Config.AcceptanceRadius);
 					}
 				}
 				else
 				{
 					StopAllMontages();
-					AIController->MoveToTargetPlayer(AttackConfigs[CurrentAttackIndex].AcceptanceRadius);
+					AIController->MoveToTargetPlayer(Config.AcceptanceRadius);
 				}
 			}
 		}
@@ -291,23 +294,36 @@ void AEnemy::ExecuteRaycastAttack(const FAttackConfig& AttackConfig)
 
 void AEnemy::OnAttackHit()
 {
-	if (AActor* Player = GetPlayerActor())
-	{
-		float Distance = GetDistanceToPlayer();
-		if (Distance <= AttackConfigs[CurrentAttackIndex].MaxRange)
-		{
-			UGameplayStatics::ApplyDamage(
-				Player,
-				AttackConfigs[CurrentAttackIndex].Damage,
-				GetController(),
-				this,
-				UDamageType::StaticClass()
-			);
-			UE_LOG(LogTemp, Log, TEXT("近战命中，伤害=%.0f"), AttackConfigs[CurrentAttackIndex].Damage);
+	if (!bIsAttacking || AttackConfigs[CurrentAttackIndex].Type != EAttackType::Melee) return;
 
-			if (BlackboardComp)
+	const FAttackConfig& Config = AttackConfigs[CurrentAttackIndex];
+	// 检测起点：敌人位置 + 高度偏移
+	FVector Start = GetActorLocation() + FVector(0, 0, 50);
+	// 球形检测（起点=终点=Start，形成原地球形）
+	FCollisionShape Sphere = FCollisionShape::MakeSphere(Config.MeleeRadius);
+	TArray<FHitResult> HitResults;
+	// 检测玩家（Pawn）通道
+	bool bHit = GetWorld()->SweepMultiByChannel(HitResults, Start, Start, FQuat::Identity, ECC_Pawn, Sphere);
+	// 调试可视化（开发时开启）
+    DrawDebugSphere(GetWorld(), Start, Config.MeleeRadius, 12, FColor::Red, false, 1.f);
+
+	if (bHit)
+	{
+		for (auto& Hit : HitResults)
+		{
+			if (AAlexCharacter* Player = Cast<AAlexCharacter>(Hit.GetActor()))
 			{
-				BlackboardComp->SetValueAsBool("AttackHit", true);
+				// 扇形角度检测
+				FVector ToPlayer = (Player->GetActorLocation() - GetActorLocation()).GetSafeNormal();
+				FVector Forward = GetActorForwardVector();
+				float AngleDegrees = FMath::Acos(FVector::DotProduct(Forward, ToPlayer)) * (180.f / PI);
+
+				// 在攻击角度内则造成伤害
+				if (AngleDegrees <= Config.AttackAngle / 2.f)
+				{
+					UGameplayStatics::ApplyDamage(Player, Config.Damage, GetController(), this, UDamageType::StaticClass());
+                    break; // 命中一个即退出
+				}
 			}
 		}
 	}

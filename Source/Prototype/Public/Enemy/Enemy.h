@@ -35,7 +35,7 @@ struct FAttackConfig
 	float Damage = 10.0f;
 
 	// 攻击间隔
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta=(ToolTip="Seconds before next attack. <=0 = use animation length instead"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta = (ToolTip = "Seconds before next attack. <=0 = use animation length instead"))
 	float AttackCooldown = 2.0f;
 
 	// 攻击类型
@@ -43,7 +43,7 @@ struct FAttackConfig
 	EAttackType Type = EAttackType::Melee;
 
 	// 最大射程（远程攻击用）
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta = (ToolTip = "For Projectile or Raycast Enemy", EditCondition = "Type == EAttackType::Projectile || Type == EAttackType::Raycast"))
 	float MaxRange = 150.0f;
 
 	// 与目标的可接受距离
@@ -53,6 +53,15 @@ struct FAttackConfig
 	// 子弹类（仅弹道攻击用）
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta=(EditCondition="Type == EAttackType::Projectile"))
 	TSubclassOf<AProjectile> ProjectileClass = nullptr;
+
+	UPROPERTY(EditAnywhere, Category="Combat|Melee", meta=(EditCondition="Type == EAttackType::Melee"))
+    float MeleeRadius = 100.f;  // 检测半径
+    
+    UPROPERTY(EditAnywhere, Category="Combat|Melee", meta=(EditCondition="Type == EAttackType::Melee"))
+    float MeleeRange = 150.f;   // 攻击距离
+    
+    UPROPERTY(EditAnywhere, Category="Combat|Melee", meta=(EditCondition="Type == EAttackType::Melee"))
+    float AttackAngle = 90.f;   // 扇形角度
 
 	// 标签（扩展用，可留空）
 	/*UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")

@@ -38,13 +38,6 @@ void AProjectile::BeginPlay()
 
 void AProjectile::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
-	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, FString::Printf(TEXT("Projectile Hit Something")));
-
-	if (OtherActor)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, FString::Printf(TEXT("Projectile Hit Actor: %s Instigator: %s"), *GetNameSafe(OtherActor), *GetNameSafe(GetInstigator())));
-	}
-
 	if (OtherActor && OtherActor != GetInstigator())
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, FString::Printf(TEXT("Try Damage: %f"), Damage));

@@ -31,11 +31,11 @@ struct FCharacterAnimation
 	UAnimMontage* Montage = nullptr;
 
 	// 单个Section
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation", meta=(EditCondition="!bUseSectionSequence"))
 	FName SectionName = NAME_None;
 
 	// Section序列
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation",meta=(EditCondition="bUseSectionSequence"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation", meta=(EditCondition="bUseSectionSequence"))
 	TArray<FName> SectionSequence;
 
 	// 是否使用Section序列

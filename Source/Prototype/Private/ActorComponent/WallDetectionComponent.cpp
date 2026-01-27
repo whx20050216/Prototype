@@ -27,38 +27,33 @@ void UWallDetectionComponent::UpdateDetection()
 	DetectionResult = EDetectionResult::Clear;
 
 	BottomTrace();
+	MiddleTrace();
+	TopTrace();
 
-	if (!BottomHit.bBlockingHit)
+	bool bBottom = BottomHit.bBlockingHit;
+	bool bMiddle = MiddleHit.bBlockingHit;
+	bool bTop = TopHit.bBlockingHit;
+
+	if (bBottom && bMiddle && bTop)
 	{
-		MiddleTrace();
-		if (MiddleHit.bBlockingHit)
-		{
-			DetectionResult = EDetectionResult::VaultPossible;
-			bCanVault = true;
-			UpToDownTrace();
-		}
+		DetectionResult = EDetectionResult::WallRunPossible;
+		EvaluateResults();
 		return;
 	}
 
-	MiddleTrace();
-    if (!MiddleHit.bBlockingHit)
-    {
-        DetectionResult = EDetectionResult::VaultPossible;
+	if ((bBottom && !bMiddle && !bTop) || (bBottom && bMiddle && !bTop) || (!bBottom && bMiddle && !bTop))
+	{
+		DetectionResult = EDetectionResult::VaultPossible;
 		bCanVault = true;
 		UpToDownTrace();
-        return;
-    }
+		return;
+	}
 
-	TopTrace();
-    if (!TopHit.bBlockingHit)
-    {
-        DetectionResult = EDetectionResult::VaultPossible;
-		bCanVault = true;
-		UpToDownTrace();
-        return;
-    }
-
-	EvaluateResults();
+	if (bBottom || bMiddle || bTop)
+	{
+		DetectionResult = EDetectionResult::Invalid;
+		return;
+	}
 }
 
 void UWallDetectionComponent::UpToDownTrace()
