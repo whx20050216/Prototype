@@ -22,6 +22,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="AI")
 	void StopMovingToPlayer();
 
+	// 目标丢失
+	UFUNCTION(BlueprintCallable, Category="AI")
+	void OnTargetLost();
+
 	// 黑板管理函数
 	UFUNCTION(BlueprintCallable, Category="AI|Blackboard")
 	void SetTargetPlayer(AActor* Player);

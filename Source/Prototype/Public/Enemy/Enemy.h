@@ -75,6 +75,7 @@ class PROTOTYPE_API AEnemy : public ABaseCharacter
 	
 public:
 	AEnemy();
+	virtual void Tick(float DeltaTime) override;
 
 	// 暴露给行为树的工具函数
 	UFUNCTION(BlueprintCallable, Category="AI")
@@ -82,6 +83,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="AI")
     bool CanPerformAttack() const;
+
+	UFUNCTION(BlueprintCallable, Category="Combat")
+    void CancelAttack();
 
 	// 攻击配置（可以在蓝图中设置多组，行为树切换）
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
@@ -113,6 +117,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void SetAttackType(EAttackType Type);
 
+	// 获取当前动画Pitch值
+	UFUNCTION(BlueprintCallable, Category="Combat")
+    float GetCurrentAimPitch() const;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -128,6 +136,15 @@ protected:
 	void OnAnimMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 	
 private:
+	FVector CachedMuzzleLocation;
+    FRotator CachedMuzzleRotation;
+    
+    // 核心计算函数：同时更新角度和枪口位置
+    void UpdateAimingData();
+
+	// 缓存当前计算的Pitch，避免每帧算两次
+    float CurrentAimPitch = 0.f;
+
 	FTimerHandle PlayerVisibilityTimer;  // 检测玩家可见性的计时器
 	float PlayerVisibilityCheckInterval = 0.5f;  // 每0.5秒检查一次
 

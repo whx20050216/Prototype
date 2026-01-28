@@ -13,6 +13,8 @@
 
 AEnemy::AEnemy()
 {
+	PrimaryActorTick.bCanEverTick = true;
+
 	PawnSensing = CreateDefaultSubobject<UPawnSensingComponent>(TEXT("PawnSensing"));
 	PawnSensing->SightRadius = 2000.f;		//2000.f为视野半径
 	PawnSensing->SetPeripheralVisionAngle(60.f);	// 100度总视野
@@ -20,6 +22,21 @@ AEnemy::AEnemy()
 	// 指定AIController类
 	AIControllerClass = AEnemyAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+}
+
+void AEnemy::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	// 只在远程攻击状态下更新Pitch（优化）
+    if (bIsAttacking && AttackConfigs[CurrentAttackIndex].Type != EAttackType::Melee)
+    {
+        UpdateAimingData();
+    }
+	else
+	{
+		CurrentAimPitch = FMath::FInterpTo(CurrentAimPitch, 0.f, DeltaTime, 5.f);
+	}
 }
 
 void AEnemy::ExecuteAttack()
@@ -62,7 +79,23 @@ void AEnemy::ExecuteAttack()
 
 bool AEnemy::CanPerformAttack() const
 {
-	return !bIsAttacking && !GetWorld()->GetTimerManager().IsTimerActive(AttackCooldownTimer);
+	return !GetWorld()->GetTimerManager().IsTimerActive(AttackCooldownTimer);
+}
+
+void AEnemy::CancelAttack()
+{
+	StopAllMontages();
+	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Cancel Attack")));
+	if (bIsAttacking)
+	{
+		bIsAttacking = false;
+		GetWorld()->GetTimerManager().ClearTimer(AttackCooldownTimer);
+		if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+        {
+            AIController->SetIsAttacking(false);
+            AIController->ClearFocus(EAIFocusPriority::Gameplay);
+        }
+	}
 }
 
 void AEnemy::BeginPlay()
@@ -155,6 +188,29 @@ void AEnemy::OnAnimMontageEnded(UAnimMontage* Montage, bool bInterrupted)
 	}
 }
 
+void AEnemy::UpdateAimingData()
+{
+	if (AActor* Player = GetPlayerActor())
+	{
+		const FVector BaseOffset(0, 0, 50.f);
+		FVector ShoulderLocation = GetActorLocation() + BaseOffset;		//子弹生成的高度位置
+		FVector TargetLocation = Player->GetActorLocation() + BaseOffset;	//瞄准胸口
+
+		FVector ToTarget = (TargetLocation - ShoulderLocation).GetSafeNormal();
+		float Dist2D = FVector::Dist2D(ToTarget, FVector::ZeroVector);
+
+		float IdealPitch = FMath::Atan2(ToTarget.Z, Dist2D) * (180.f / PI);
+
+		CurrentAimPitch = FMath::Clamp(IdealPitch, -50.f, 50.f);
+
+		FRotator AimRot(CurrentAimPitch, GetActorRotation().Yaw, 0.f);
+		FVector AimDir = AimRot.Vector();
+
+		CachedMuzzleLocation = ShoulderLocation + (AimDir * 150.f);
+		CachedMuzzleRotation = AimRot;
+	}
+}
+
 AActor* AEnemy::GetPlayerActor() const
 {
 	return UGameplayStatics::GetPlayerCharacter(this, 0);
@@ -178,8 +234,7 @@ void AEnemy::CheckPlayerVisibility()
 	{
 		if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
 		{
-			AIController->ClearTargetPlayer();// Controller清除记忆
-			AIController->StopMovingToPlayer();
+			AIController->OnTargetLost();
 		}
 		GetWorld()->GetTimerManager().ClearTimer(PlayerVisibilityTimer);
 	}
@@ -209,6 +264,11 @@ void AEnemy::SetAttackType(EAttackType Type)
     CurrentAttackIndex = 0;
 }
 
+float AEnemy::GetCurrentAimPitch() const
+{
+	return CurrentAimPitch;
+}
+
 void AEnemy::ExecuteMeleeAttack(const FAttackConfig& AttackConfig)
 {
 	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Execute Melee Attack")));
@@ -222,12 +282,11 @@ void AEnemy::ExecuteProjectileAttack(const FAttackConfig& AttackConfig)
 
 	if (AActor* Player = GetPlayerActor())
 	{
-		//发射点偏移，避免从地面射出
-		FVector MuzzleLocation = GetActorLocation() + GetActorForwardVector() * 150.f + FVector(0, 0, 50);
-		//计算从枪口到玩家的旋转角，让子弹"瞄准"玩家
-		FVector TargetLocation = Player->GetActorLocation();
-		TargetLocation.Z = MuzzleLocation.Z;
-		FRotator MuzzleRotation = (TargetLocation - MuzzleLocation).Rotation();
+		////发射点偏移，避免从地面射出
+		//FVector MuzzleLocation = GetActorLocation() + GetActorForwardVector() * 150.f + FVector(0, 0, 50);
+		////计算从枪口到玩家的旋转角，让子弹"瞄准"玩家
+		//FVector TargetLocation = Player->GetActorLocation() + FVector(0, 0, 50.f);
+		//FRotator MuzzleRotation = (TargetLocation - MuzzleLocation).Rotation();
 
 		/*
 		* AdjustIfPossibleButAlwaysSpawn	尝试微调位置避开碰撞，但必定生成（可能卡在墙里）
@@ -242,8 +301,8 @@ void AEnemy::ExecuteProjectileAttack(const FAttackConfig& AttackConfig)
 
 		AProjectile* Projectile = GetWorld()->SpawnActor<AProjectile>(
 			AttackConfig.ProjectileClass,
-			MuzzleLocation,
-			MuzzleRotation,
+			CachedMuzzleLocation,
+			CachedMuzzleRotation,
 			SpawnParams
 		);
 
@@ -262,7 +321,8 @@ void AEnemy::ExecuteRaycastAttack(const FAttackConfig& AttackConfig)
 	if (AActor* Player = GetPlayerActor())
 	{
 		FVector Start = GetActorLocation() + FVector(0, 0, 50);
-		FVector End = Start + GetActorForwardVector() * AttackConfig.MaxRange;
+		FVector ToPlayer = (Player->GetActorLocation() - Start).GetSafeNormal();
+		FVector End = Start + ToPlayer * AttackConfig.MaxRange;
 
 		FCollisionQueryParams QueryParams;
 		QueryParams.AddIgnoredActor(this);
@@ -331,9 +391,4 @@ void AEnemy::OnAttackHit()
 
 void AEnemy::OnAttackCooldownEnd()
 {
-	bIsAttacking = false;
-	if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
-	{
-		AIController->SetIsAttacking(false);
-	}
 }

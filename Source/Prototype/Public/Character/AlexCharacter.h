@@ -33,15 +33,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WallDetection")
 	UWallDetectionComponent* WallDetection;
 
-	/**
-	 * 摄像机震动效果（向下偏移后平滑回弹）
-	 * @param OffsetZ 摄像机向下偏移量（负值）
-	 * @param Duration 保持偏移的持续时间（秒）
-	 * @param LiftSpeed 回弹插值速度
-	 */
-	UFUNCTION(BlueprintCallable, Category="Camera")
-	void CameraShakeOffset(float OffsetZ, float Duration = 0.3f, float LiftSpeed = 5.f);
-
 	/*蓝图攀爬方法*/
 	UFUNCTION(BlueprintImplementableEvent, Category="Climb")
 	void BP_OnStartClimb();
@@ -316,27 +307,6 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SceneComponent", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* ViewCamera;
-
-	/* 
-	* 摄像机震动参数
-	*/
-	UPROPERTY(EditAnywhere, Category="Camera|Glide")
-	float GlideCameraOffsetZ = -30.f;        // 滑翔开始时摄像机向下偏移量（负值）
-	
-	UPROPERTY(EditAnywhere, Category="Camera|Glide")
-	float GlideCameraLiftDuration = 0.3f;    // 摄像机回弹持续时间
-	
-	UPROPERTY(EditAnywhere, Category="Camera|Glide")
-	float GlideCameraLiftSpeed = 5.f;        // 回弹插值速度
-	
-	UPROPERTY()
-	float CurrentCameraOffsetZ = 0.f;        // 当前摄像机Z轴偏移（运行时）
-	
-	UPROPERTY()
-	FTimerHandle CameraLiftTimer;            // 摄像机回弹计时器
-	
-	// 每帧更新摄像机偏移插值
-	void UpdateCameraOffset(float DeltaTime);
 
 	/*
 	* 增强输入相关

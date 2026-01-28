@@ -89,6 +89,17 @@ void AEnemyAIController::StopMovingToPlayer()
     ClearTargetPlayer();
 }
 
+void AEnemyAIController::OnTargetLost()
+{
+    if (AEnemy* Enemy = Cast<AEnemy>(GetPawn()))
+    {
+        Enemy->CancelAttack();
+    }
+
+    StopMovingToPlayer();
+    SetIsAttacking(false);
+}
+
 void AEnemyAIController::SetTargetPlayer(AActor* Player)
 {
     if (BlackboardComp)
