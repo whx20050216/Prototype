@@ -87,8 +87,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category="AnimMontage")
 	UAnimMontage* DashMontage;			//冲刺动作
 
-	UPROPERTY(EditAnywhere, Category="Vault")
-	UAnimMontage* RunningVaultMontage;
+	UPROPERTY(EditAnywhere, Category="AnimMontage")
+	UAnimMontage* RunningVaultMontage;	// 奔跑翻越动作
+
+	UPROPERTY(EditAnywhere, Category = "AnimMontage")
+	UAnimMontage* RoofFlipMontage;		// 屋顶翻滚动作
+
+	UPROPERTY(EditAnywhere, Category = "AnimMontage")
+	UAnimMontage* SkidMontage;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	UAttributeComponent* AttributeComponent;
@@ -180,6 +186,13 @@ private:
 	float WallRunJumpCooldownDuration = 0.7f;  // 冷却时间（秒），推荐0.3-0.5
 
 
+	//预判楼顶
+	bool CheckApproachingRoof();
+
+	// 前空翻函数
+	void PerformRoofFlip();
+	void OnRoofFlipEnded(UAnimMontage* Montage, bool bInterrupted);
+
 	// 墙跑方法
 	void StartWallRun();
 	void StopWallRun();
@@ -262,6 +275,12 @@ private:
 	UPROPERTY()
 	bool bRunActive = false;           // true=当前处于奔跑锁定状态
 
+	UPROPERTY()
+	bool bIsSkidding = false;			//是否在急停
+
+	// 惯性急停
+	void PlaySkidMontage();
+	void InterruptSkid();
 
 	/* 
 	* 蓄力跳参数 

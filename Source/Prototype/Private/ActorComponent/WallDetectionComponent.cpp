@@ -340,3 +340,49 @@ void UWallDetectionComponent::LeftCapsuleTrace()
 		FColor::Cyan  // 左侧用青色区分
 	);
 }
+
+void UWallDetectionComponent::UpperTrace()
+{
+	if (!CharacterOwner) return;
+
+	FVector Start = CharacterOwner->GetActorLocation() + FVector(0.f, 0.f, 100.f);
+	FVector End = Start + FVector::UpVector * UpperTraceLength;
+
+	if (GetWorld())
+	{
+		GetWorld()->LineTraceSingleByObjectType(
+			UpperHit,
+			Start,
+			End,
+			FCollisionObjectQueryParams(ECollisionChannel::ECC_WorldStatic),
+			FCollisionQueryParams(NAME_None, false, CharacterOwner)
+		);
+
+		// Debug 绘制：未命中青色，命中白色，命中点黄色
+		FColor LineColor = UpperHit.bBlockingHit ? FColor::White : FColor::Cyan;
+		DrawDebugLine(
+			GetWorld(),
+			Start,
+			UpperHit.bBlockingHit ? UpperHit.Location : End,
+			LineColor,
+			false,
+			0.1f,
+			0,
+			1.0f
+		);
+
+		if (UpperHit.bBlockingHit)
+		{
+			DrawDebugSphere(
+				GetWorld(),
+				UpperHit.Location,
+				10.0f,
+				16,
+				FColor::Yellow,
+				false,
+				0.1f
+			);
+		}
+	}
+}
+

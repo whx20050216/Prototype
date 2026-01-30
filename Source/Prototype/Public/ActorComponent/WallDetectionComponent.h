@@ -32,6 +32,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Trace")
 	void LeftCapsuleTrace();
 
+	UFUNCTION(BlueprintCallable, Category="Trace")
+	void UpperTrace();
+
 	UFUNCTION(BlueprintCallable, Category="Trace Results")
     const FHitResult& GetRightCapsuleHit() const { return RightCapsuleHit; }
 
@@ -41,8 +44,23 @@ public:
     UFUNCTION(BlueprintCallable, Category="Trace Results")
 	const FHitResult& GetUpToDownHit() const { return UpToDownHit; }
 
+	UFUNCTION(BlueprintCallable, Category="Trace Results")
+	const FHitResult& GetBottomHit() const { return BottomHit; }
+
+	UFUNCTION(BlueprintCallable, Category="Trace Results")
+	const FHitResult& GetMiddleHit() const { return MiddleHit; }
+
+	UFUNCTION(BlueprintCallable, Category="Trace Results")
+	const FHitResult& GetTopHit() const { return TopHit; }
+
+	UFUNCTION(BlueprintCallable, Category="Trace Results")
+	const FHitResult& GetUpperHit() const { return UpperHit; }
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Trace")
     float LineTraceLength = 250.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Trace")
+	float UpperTraceLength = 150.f;
 
 	UPROPERTY(BlueprintReadOnly, Category="Trace")
 	FVector WallNormal;
@@ -63,6 +81,9 @@ public:
 	float CapsuleHalfHeight = 90.f;
 	
 protected:
+	UPROPERTY()
+	FHitResult UpperHit;
+
 	UPROPERTY()
 	FHitResult MiddleHit;
 

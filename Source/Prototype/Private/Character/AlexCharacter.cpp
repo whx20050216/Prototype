@@ -91,6 +91,8 @@ void AAlexCharacter::Tick(float DeltaTime)
 	{
 		UpdateWallRun(DeltaTime);
 	}
+
+	InterruptSkid();
 }
 
 void AAlexCharacter::ResetRun()
@@ -201,6 +203,12 @@ void AAlexCharacter::MOVE_Completed(const FInputActionValue& Value)
         LastMovementInput = FVector2D::ZeroVector;
     }
 	bHasMovementInput = false;
+
+	// 关键：判断是否应该急停
+    if (bRunActive && GetCharacterMovement()->Velocity.Size2D() > 600.f) // 速度大于阈值（比如600）
+    {
+        PlaySkidMontage();
+    }
 }
 
 void AAlexCharacter::LOOK(const FInputActionValue& Value)
@@ -437,6 +445,69 @@ FVector AAlexCharacter::CalculateVaultVelocity()
     return LaunchVel;
 }
 
+bool AAlexCharacter::CheckApproachingRoof()
+{
+	if (!WallDetection) return false;
+
+	WallDetection->UpperTrace();
+
+	// 必须是向上移动（玩家按住W/上）
+    // 如果 LastMovementInput.Y < 0.1f（阈值可调），说明没想往上，不触发
+	if (LastMovementInput.Y < 0.1f) return false;
+
+	// 获取三个检测点状态
+	const FHitResult& TopHit = WallDetection->GetTopHit();
+	const FHitResult& MiddleHit = WallDetection->GetMiddleHit();
+	const FHitResult& BottomHit = WallDetection->GetBottomHit();
+	const FHitResult& UpperHit = WallDetection->GetUpperHit();
+
+	// 核心判断：顶射线和中射线检测不到了，但下还能检测到
+    // 说明角色头部已经超出楼顶，但身体还在墙面上（正在翻越的瞬间）
+	return !TopHit.bBlockingHit
+		&& MiddleHit.bBlockingHit
+		&& BottomHit.bBlockingHit
+		&& !UpperHit.bBlockingHit;
+}
+
+void AAlexCharacter::PerformRoofFlip()
+{
+	if (!RoofFlipMontage) return;
+
+	bIsWallRunning = false;
+	ActionState = EActionState::EAS_Unoccupied;
+
+	FVector Forward = GetActorForwardVector();
+	FVector LaunchVel = Forward * 600.f + FVector::UpVector * 450.f;
+
+	LaunchCharacter(LaunchVel, true, true);
+
+	GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+
+	PlayAnimation(RoofFlipMontage);
+
+	FOnMontageEnded EndDelegate;
+    EndDelegate.BindUObject(this, &AAlexCharacter::OnRoofFlipEnded);
+    GetMesh()->GetAnimInstance()->Montage_SetEndDelegate(EndDelegate, RoofFlipMontage);
+}
+
+void AAlexCharacter::OnRoofFlipEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	GetCharacterMovement()->GravityScale = PreWallRunGravityScale;
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+
+	if (GetCharacterMovement()->IsMovingOnGround())
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	}
+	else
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+	}
+
+	LastMovementInput = FVector2D::ZeroVector;
+    bHasMovementInput = false;
+}
+
 void AAlexCharacter::StartWallRun()
 {
 	bool bIsAutoFromGlide = (ActionState == EActionState::EAS_Gliding);
@@ -539,6 +610,14 @@ void AAlexCharacter::StopWallRun()
 void AAlexCharacter::UpdateWallRun(float DeltaTime)
 {
 	if (!bIsWallRunning || !WallDetection) return;
+
+	// 预判楼顶
+	if (CheckApproachingRoof())
+	{
+		PerformRoofFlip();
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Approaching Roof")));
+		return;
+	}
 
 	if (!bHasMovementInput || LastMovementInput.IsNearlyZero())
     {
@@ -843,6 +922,72 @@ bool AAlexCharacter::CanGlide() const
 		ActionState != EActionState::EAS_Gliding &&
 		ActionState != EActionState::EAS_Dead &&
 		!bIsCharging;
+}
+
+void AAlexCharacter::PlaySkidMontage()
+{
+	if (!SkidMontage) return;
+	if (!bRunActive) return;
+	if (GetCharacterMovement()->IsFalling()) return;  // 跳跃/下落中
+	if (GetCharacterMovement()->MovementMode != MOVE_Walking) return;// 不是行走模式
+	if (bIsVaulting) return;  // 翻越中
+	if (ActionState == EActionState::EAS_Gliding) return;  // 滑翔中
+	if (bIsWallRunning) return;  // 墙跑中（如果你用这个标记）
+	if (bIsClimbing) return;  // 攀爬中
+
+	float Speed = GetCharacterMovement()->Velocity.Size2D();
+	if (Speed < 1000.f) return; 
+
+	bIsSkidding = true;
+	PlayAnimation(SkidMontage);
+	// 设置减速参数
+    GetCharacterMovement()->BrakingDecelerationWalking = 100.f; // 增大刹车力度（默认是0或很小）
+    GetCharacterMovement()->GroundFriction = 0.8f; // 增大地面摩擦（默认8，可以调到2-3让滑得更远）
+}
+
+void AAlexCharacter::InterruptSkid()
+{
+	if (!bIsSkidding) return;
+
+	float CurrentSpeed = GetCharacterMovement()->Velocity.Size2D();
+	if (CurrentSpeed < 300.f) // 阈值可调，200 约等于走路速度
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Interrupt Skid")));
+		if (GetMesh()->GetAnimInstance()->Montage_IsPlaying(SkidMontage))
+		{
+			GetMesh()->GetAnimInstance()->Montage_Stop(0.2f, SkidMontage); // 0.2秒融合，不生硬
+		}
+		
+		bIsSkidding = false;
+		GetCharacterMovement()->GroundFriction = 8.f;
+		GetCharacterMovement()->BrakingDecelerationWalking = 0.f;
+		return; // 提前返回，不再检查其他条件
+	}
+
+	// 如果玩家又按了移动键（且有一定输入量）
+    if (bHasMovementInput && LastMovementInput.Size() > 0.1f)
+    {
+        // 立即停止急停蒙太奇（BlendOut时间0.2秒，不要太长）
+        if (GetMesh()->GetAnimInstance()->Montage_IsPlaying(SkidMontage))
+        {
+            GetMesh()->GetAnimInstance()->Montage_Stop(0.2f, SkidMontage);
+        }
+        
+        bIsSkidding = false;
+        
+        // 恢复正常摩擦（如果之前改了）
+        GetCharacterMovement()->GroundFriction = 8.f; // 默认值
+        GetCharacterMovement()->BrakingDecelerationWalking = 0.f; // 默认值
+    }
+
+	// 如果动画播完了（自然停下）
+    if (!GetMesh()->GetAnimInstance()->Montage_IsPlaying(SkidMontage))
+    {
+        bIsSkidding = false;
+        // 恢复默认摩擦
+        GetCharacterMovement()->GroundFriction = 8.f;
+		GetCharacterMovement()->BrakingDecelerationWalking = 0.f;
+    }
 }
 
 void AAlexCharacter::StartCharge()
