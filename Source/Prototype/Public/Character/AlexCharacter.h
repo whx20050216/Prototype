@@ -94,7 +94,10 @@ protected:
 	UAnimMontage* RoofFlipMontage;		// 屋顶翻滚动作
 
 	UPROPERTY(EditAnywhere, Category = "AnimMontage")
-	UAnimMontage* SkidMontage;
+	UAnimMontage* SkidMontage;			// 急刹滑行动作
+
+	UPROPERTY(EditAnywhere, Category="AnimMontage")
+	UAnimMontage* ClimbMantleMontage;	// 爬上楼顶动作
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	UAttributeComponent* AttributeComponent;
@@ -226,6 +229,13 @@ private:
 	void StartClimb();
 	void StopClimb();
 	void UpdateClimb(float DeltaTime);
+
+	// 检测攀爬到楼顶
+	bool CheckClimbMantle();
+
+	// 爬上楼顶
+	void PerformClimbMantle();
+	void OnClimbMantleEnded(UAnimMontage* Montage, bool bInterrupted);
 
 	/* 
 	* 滑翔参数 

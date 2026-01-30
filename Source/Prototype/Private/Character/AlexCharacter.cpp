@@ -743,6 +743,15 @@ void AAlexCharacter::StopClimb()
 void AAlexCharacter::UpdateClimb(float DeltaTime)
 {
 	if (!bIsClimbing || !WallDetection) return;
+	if (ClimbMantleMontage && GetMesh()->GetAnimInstance()->Montage_IsPlaying(ClimbMantleMontage))
+    {
+        return;
+    }
+	if (CheckClimbMantle())
+	{
+		PerformClimbMantle();
+		return;
+	}
 	if (!WallDetection->bCanWallRun)
     {
         StopClimb();  // ×Ô¶¯ÍË³öÅÊÅÀ×´Ì¬
@@ -785,15 +794,55 @@ void AAlexCharacter::UpdateClimb(float DeltaTime)
 		ClimbDirection = (WallRight * LastMovementInput.X + WallUp * LastMovementInput.Y).GetSafeNormal();
 		if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))
 		{
-			AnimInst->ClimbDirection = ClimbDirection;
+			AnimInst->ClimbHorizontal = LastMovementInput.X;
+			AnimInst->ClimbVertical = LastMovementInput.Y;
 		}
 	}
 	else
 	{
 		ClimbDirection = FVector::ZeroVector;
+		if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))
+		{
+		    AnimInst->ClimbHorizontal = 0.0f;
+		    AnimInst->ClimbVertical = 0.0f;
+		}
 	}
 
 	BP_OnUpdateClimb(DeltaTime);
+}
+
+bool AAlexCharacter::CheckClimbMantle()
+{
+	if (!WallDetection || !bIsClimbing) return false;
+
+	if (LastMovementInput.Y < 0.1f) return false;
+
+	WallDetection->UpperTrace();
+
+	const FHitResult& UpperHit = WallDetection->GetUpperHit();
+	const FHitResult& TopHit = WallDetection->GetTopHit();
+	const FHitResult& MiddleHit = WallDetection->GetMiddleHit();
+
+	return !UpperHit.bBlockingHit && !TopHit.bBlockingHit && MiddleHit.bBlockingHit;
+}
+
+void AAlexCharacter::PerformClimbMantle()
+{
+	if (!ClimbMantleMontage) return;
+
+	LastMovementInput = FVector2D::ZeroVector;
+    bHasMovementInput = false;
+
+	PlayAnimation(ClimbMantleMontage);
+
+	FOnMontageEnded EndDelegate;
+    EndDelegate.BindUObject(this, &AAlexCharacter::OnClimbMantleEnded);
+    GetMesh()->GetAnimInstance()->Montage_SetEndDelegate(EndDelegate, ClimbMantleMontage);
+}
+
+void AAlexCharacter::OnClimbMantleEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	StopClimb();
 }
 
 void AAlexCharacter::StartGlide()

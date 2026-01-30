@@ -40,7 +40,10 @@ public:
 	bool bIsClimbing;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Climb")
-	FVector ClimbDirection;
+	float ClimbHorizontal;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Climb")
+	float ClimbVertical;
 
 	UPROPERTY(BlueprintReadOnly, Category = "WallRun")
 	bool bIsWallRunning;
