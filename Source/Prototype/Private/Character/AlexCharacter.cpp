@@ -477,7 +477,7 @@ void AAlexCharacter::PerformRoofFlip()
 	ActionState = EActionState::EAS_Unoccupied;
 
 	FVector Forward = GetActorForwardVector();
-	FVector LaunchVel = Forward * 600.f + FVector::UpVector * 450.f;
+	FVector LaunchVel = Forward * 600.f + FVector::UpVector * 400.f;
 
 	LaunchCharacter(LaunchVel, true, true);
 
