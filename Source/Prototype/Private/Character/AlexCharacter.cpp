@@ -15,6 +15,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "ActorComponent/AttributeComponent.h"
 #include "HUD/HealthWidget.h"
+#include "Components/CanvasPanelSlot.h"
 
 AAlexCharacter::AAlexCharacter()
 {
@@ -60,9 +61,9 @@ void AAlexCharacter::Tick(float DeltaTime)
 	{
 		WallRunJumpCooldown -= DeltaTime;
 	}
-	
+
 	// 更新滑翔逻辑
-    UpdateGlide(DeltaTime);
+	UpdateGlide(DeltaTime);
 
 	/* 奔跑状态重置逻辑 */
 	ResetRun();
@@ -70,29 +71,36 @@ void AAlexCharacter::Tick(float DeltaTime)
 	WallDetection->UpdateDetection();
 
 	//疾跑时尝试自动翻越
-	if (bRunActive)
-	{
-		TryAutoVault();
-	}
+	if (bRunActive) TryAutoVault();
 
 	//奔跑或滑翔下自动检测并启动墙跑
 	bool bShouldCheckWallRun = (bRunActive || ActionState == EActionState::EAS_Gliding);
 	if (!bIsWallRunning && !bIsVaulting && WallDetection->bCanWallRun && bShouldCheckWallRun && WallRunJumpCooldown <= 0.f)
-    {
-        StartWallRun();
-    }
-
-	if (bIsClimbing)
-    {
-        UpdateClimb(DeltaTime);
-    }
-
-	if (bIsWallRunning)
 	{
-		UpdateWallRun(DeltaTime);
+		StartWallRun();
 	}
 
+	//处理攀爬逻辑
+	if (bIsClimbing) UpdateClimb(DeltaTime);
+
+	//处理墙跑逻辑
+	if (bIsWallRunning) UpdateWallRun(DeltaTime);
+
+	//处理打断急停惯性逻辑
 	InterruptSkid();
+
+	//锁定系统更新
+	if (bIsSelectingTarget)
+	{
+		UpdateTargetSelection();
+	}
+	else if (LockedTarget)
+	{
+		UpdateLockOnCamera(DeltaTime);
+	}
+
+	//更新锁定UI
+	UpdateLockOnUI();
 }
 
 void AAlexCharacter::ResetRun()
@@ -103,6 +111,13 @@ void AAlexCharacter::ResetRun()
 
 	if (bRunActive && (bJustPressed || bJustReleased))
 	{
+		// 检查速度是否够快
+		float Speed = GetCharacterMovement()->Velocity.Size2D();
+		if (Speed > 600.f && !bIsWallRunning && !bIsClimbing && !bIsVaulting)
+		{
+			PlaySkidMontage();
+		}
+
 		bRunActive = false;
 		GetCharacterMovement()->MaxWalkSpeed = 400.f;
 	}
@@ -125,6 +140,9 @@ void AAlexCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		EnhancedInputComponent->BindAction(DashAction, ETriggerEvent::Started, this, &AAlexCharacter::DASH);
 		EnhancedInputComponent->BindAction(ClimbAction, ETriggerEvent::Started, this, &AAlexCharacter::CLIMB);
 		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AAlexCharacter::ATTACK);
+		EnhancedInputComponent->BindAction(LockOnAction, ETriggerEvent::Started, this, &AAlexCharacter::TAB_Pressed);
+		EnhancedInputComponent->BindAction(LockOnAction, ETriggerEvent::Completed, this, &AAlexCharacter::TAB_Released);
+	
 	}
 }
 
@@ -157,6 +175,26 @@ void AAlexCharacter::BeginPlay()
 	            HealthWidget->BindToAttributeComponent(AttributeComponent);
 	        }
 	    }
+	}
+
+	if (LockOnReticleClass)
+	{
+		HoverWidget = CreateWidget<UUserWidget>(GetWorld(), LockOnReticleClass);
+		if (HoverWidget)
+		{
+			HoverWidget->AddToViewport();
+			HoverWidget->SetVisibility(ESlateVisibility::Hidden);  // 初始隐藏，等检测到敌人再显示
+		}
+	}
+
+	if (LockOnLockedClass)
+	{
+		LockedWidget = CreateWidget<UUserWidget>(GetWorld(), LockOnLockedClass);
+		if (LockedWidget)
+		{
+			LockedWidget->AddToViewport();
+			LockedWidget->SetVisibility(ESlateVisibility::Hidden);  // 初始隐藏
+		}
 	}
 }
 
@@ -203,12 +241,6 @@ void AAlexCharacter::MOVE_Completed(const FInputActionValue& Value)
         LastMovementInput = FVector2D::ZeroVector;
     }
 	bHasMovementInput = false;
-
-	// 关键：判断是否应该急停
-    if (bRunActive && GetCharacterMovement()->Velocity.Size2D() > 600.f) // 速度大于阈值（比如600）
-    {
-        PlaySkidMontage();
-    }
 }
 
 void AAlexCharacter::LOOK(const FInputActionValue& Value)
@@ -336,6 +368,339 @@ void AAlexCharacter::ATTACK()
 	bIsAttacking = true;
 	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("ATTACK")));
 	PlayAnimationWithSections(AnimationConfig.Montage, AnimationConfig.SectionSequence, AnimationConfig.PlayRate);
+}
+
+void AAlexCharacter::TAB_Pressed()
+{
+	if (LockedTarget)
+	{
+		// 已经锁定，再按 Tab 取消锁定
+		CancelLockOn();
+	}
+	else
+	{
+		// 进入选择模式
+		bIsSelectingTarget = true;
+		HoveredTarget = nullptr;
+	}
+}
+
+void AAlexCharacter::TAB_Released()
+{
+	if (bIsSelectingTarget)
+	{
+		bIsSelectingTarget = false;
+		ConfirmLockOn();
+	}
+}
+
+void AAlexCharacter::UpdateLockOnUI()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+
+	// 更新悬停框
+	UpdateTargetWidget(HoveredTarget, HoverWidget, PC);
+
+	// 更新锁定框
+	UpdateTargetWidget(LockedTarget, LockedWidget, PC);
+}
+
+void AAlexCharacter::UpdateTargetWidget(AActor* Target, UUserWidget* Widget, APlayerController* PC)
+{
+	if (!Target || !Widget)
+	{
+		if (Widget) Widget->SetVisibility(ESlateVisibility::Hidden);
+		return;
+	}
+
+	// 获取目标在屏幕上的包围盒
+	FVector2D PixelSize, ScreenCenter;
+	if (GetTargetScreenPixelSize(Target, PC, PixelSize, ScreenCenter))
+	{
+		// 加边距
+        FVector2D TargetSize(PixelSize.X + 20.f, PixelSize.Y + 20.f);
+
+		// 钳制最大最小（防止极端情况）
+        TargetSize.X = FMath::Clamp(TargetSize.X, 40.f, 400.f);
+        TargetSize.Y = FMath::Clamp(TargetSize.Y, 60.f, 500.f);
+
+		// 关键：强制 Pivot 为左上角 (0,0)，确保 SetPositionInViewport 设置的就是左上角位置
+		Widget->SetRenderTransformPivot(FVector2D(0.f, 0.f));
+		
+		// 关键：手动计算左上角位置（中心点减去半尺寸）
+		FVector2D TopLeftPosition(
+			ScreenCenter.X - (TargetSize.X / 2.f),
+			ScreenCenter.Y - (TargetSize.Y / 2.f)
+		);
+		
+		Widget->SetPositionInViewport(TopLeftPosition, true);
+
+		// 缩放
+		FVector2D OriginalSize(100.f, 100.f);
+		Widget->SetRenderScale(FVector2D(TargetSize.X / OriginalSize.X, TargetSize.Y / OriginalSize.Y));
+
+		Widget->SetVisibility(ESlateVisibility::Visible);
+
+	}
+	else
+	{
+		Widget->SetVisibility(ESlateVisibility::Hidden);
+	}
+}
+
+bool AAlexCharacter::GetTargetScreenPixelSize(AActor* Target, APlayerController* PC, FVector2D& OutSize, FVector2D& OutCenter)
+{
+	if (!Target || !PC) return false;
+
+	// 获取胶囊体组件（人形敌人的标准碰撞）
+    UCapsuleComponent* Capsule = Target->FindComponentByClass<UCapsuleComponent>();
+    if (!Capsule)
+    {
+        // 回退到包围盒逻辑
+		FVector2D Min, Max;
+		if (GetTargetScreenBounds(Target, PC, Min, Max))
+		{
+			OutSize = Max - Min;
+			OutCenter = (Min + Max) / 2.f;  // 包围盒中心
+			return true;
+		}
+		return false;
+    }
+
+	// 计算头顶和脚底的世界坐标
+	FVector ActorLocation = Target->GetActorLocation();
+    float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+    float Radius = Capsule->GetScaledCapsuleRadius();
+
+	// 定义5个关键点：中心、顶、底、左、右
+	FVector Center = ActorLocation;
+	FVector Top = ActorLocation + FVector(0, 0, HalfHeight);
+	FVector Bottom = ActorLocation - FVector(0, 0, HalfHeight);
+	FVector Left = ActorLocation - FVector(0, Radius, 0);
+	FVector Right = ActorLocation + FVector(0, Radius, 0);
+
+
+	// 投影到屏幕
+	FVector2D ScreenCenter, ScreenTop, ScreenBottom, ScreenLeft, ScreenRight;
+
+    // 投影所有点（中心必须成功）
+	if (!PC->ProjectWorldLocationToScreen(Center, ScreenCenter)) return false;
+	if (!PC->ProjectWorldLocationToScreen(Top, ScreenTop)) return false;
+	if (!PC->ProjectWorldLocationToScreen(Bottom, ScreenBottom)) return false;
+
+	// 1. 计算高度（直接用Top/Bottom的Y差值，这个相对准确）
+	float HeightPixels = FMath::Abs(ScreenTop.Y - ScreenBottom.Y);
+
+	// 2. 计算宽度和水平中心
+	float WidthPixels = 0.f;
+	if (PC->ProjectWorldLocationToScreen(Left, ScreenLeft) && PC->ProjectWorldLocationToScreen(Right, ScreenRight))
+	{
+		// 分别投影左右点，取中点作为真正的水平中心
+		WidthPixels = FMath::Abs(ScreenRight.X - ScreenLeft.X);
+		ScreenCenter.X = (ScreenLeft.X + ScreenRight.X) / 2.f;  // 修正水平偏移
+	}
+	else
+	{
+		// 回退：基于中心点估算（远距离 fallback）
+		FVector2D ScreenRightOnly;
+		if (PC->ProjectWorldLocationToScreen(Right, ScreenRightOnly))
+		{
+			WidthPixels = FMath::Abs(ScreenRightOnly.X - ScreenCenter.X) * 2.f;
+		}
+		else
+		{
+			WidthPixels = HeightPixels * 0.5f;
+		}
+	}
+
+	// 3. 距离补偿：太近时手动修正（透视畸变修正）
+    float Distance = FVector::Distance(GetActorLocation(), Target->GetActorLocation());
+    if (Distance < 300.f) // 小于3米
+    {
+        // 近距离时，投影计算会偏大，需要压缩
+        float CompressRatio = FMath::Lerp(0.6f, 1.0f, Distance / 300.f);
+        WidthPixels *= CompressRatio;
+        HeightPixels *= CompressRatio;
+    }
+    
+    OutSize = FVector2D(WidthPixels, HeightPixels);
+    OutCenter = ScreenCenter;
+    return true;
+}
+
+// 计算目标在屏幕上的包围盒
+bool AAlexCharacter::GetTargetScreenBounds(AActor* Target, APlayerController* PC, FVector2D& OutMin, FVector2D& OutMax)
+{
+	if (!Target || !PC) return false;
+
+	// 获取目标的世界空间包围盒
+	FVector Origin, BoxExtent;
+	Target->GetActorBounds(true, Origin, BoxExtent);
+
+	// 8个角点
+	FVector Corners[8];
+    Corners[0] = Origin + FVector(BoxExtent.X, BoxExtent.Y, BoxExtent.Z);
+    Corners[1] = Origin + FVector(BoxExtent.X, BoxExtent.Y, -BoxExtent.Z);
+    Corners[2] = Origin + FVector(BoxExtent.X, -BoxExtent.Y, BoxExtent.Z);
+    Corners[3] = Origin + FVector(BoxExtent.X, -BoxExtent.Y, -BoxExtent.Z);
+    Corners[4] = Origin + FVector(-BoxExtent.X, BoxExtent.Y, BoxExtent.Z);
+    Corners[5] = Origin + FVector(-BoxExtent.X, BoxExtent.Y, -BoxExtent.Z);
+    Corners[6] = Origin + FVector(-BoxExtent.X, -BoxExtent.Y, BoxExtent.Z);
+    Corners[7] = Origin + FVector(-BoxExtent.X, -BoxExtent.Y, -BoxExtent.Z);
+
+	// 投影到屏幕，找最小/最大
+	bool bFirstValid = true;
+    FVector2D MinPoint, MaxPoint;
+
+	for (int32 i = 0; i < 8; i++)
+	{
+		FVector2D ScreenPos;
+		if (PC->ProjectWorldLocationToScreen(Corners[i], ScreenPos))
+		{
+			if (bFirstValid)
+			{
+				MinPoint = MaxPoint = ScreenPos;
+				bFirstValid = false;
+			}
+			else
+			{
+				MinPoint.X = FMath::Min(MinPoint.X, ScreenPos.X);
+                MinPoint.Y = FMath::Min(MinPoint.Y, ScreenPos.Y);
+                MaxPoint.X = FMath::Max(MaxPoint.X, ScreenPos.X);
+                MaxPoint.Y = FMath::Max(MaxPoint.Y, ScreenPos.Y);
+			}
+		}
+	}
+
+	if (bFirstValid) return false; // 所有点都在屏幕外
+
+	OutMin = MinPoint;
+    OutMax = MaxPoint;
+    return true;
+}
+
+void AAlexCharacter::UpdateTargetSelection()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC) return;
+
+	// 获取屏幕中心位置（Viewport 中心）
+	int32 ViewportSizeX, ViewportSizeY;
+	PC->GetViewportSize(ViewportSizeX, ViewportSizeY);
+	FVector2D ScreenCenter(ViewportSizeX / 2, ViewportSizeY / 2);
+
+	// 屏幕中心转世界射线
+	FVector WorldLocation, WorldDirection;
+	if (!PC->DeprojectScreenPositionToWorld(ScreenCenter.X, ScreenCenter.Y, WorldLocation, WorldDirection))
+	{
+		return;
+	}
+	
+	FRotator DirectionRot = WorldDirection.Rotation();
+    DirectionRot.Pitch += 15.f;  // 负数是向上（UE坐标系：Pitch正=抬头）
+    FVector AdjustedDirection = DirectionRot.Vector();
+
+	FVector TraceStart = WorldLocation;
+	FVector TraceEnd = WorldLocation + (AdjustedDirection  * LockOnRange);
+
+	TArray<FHitResult> HitResults;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+
+	// 只检测实现了 ITargetableInterface 的 Actor（敌人等）
+    // 用 ECC_Visibility 或自定义 ECC_GameTraceChannel
+	bool bHit = GetWorld()->SweepMultiByChannel(
+		HitResults,
+		TraceStart,
+		TraceEnd,
+		FQuat::Identity,
+		ECC_Visibility,
+		FCollisionShape::MakeSphere(LockOnSphereRadius),
+		Params
+	);
+
+	AActor* NewHoveredTarget = nullptr;
+	if (bHit)
+	{
+		for (const FHitResult& Hit : HitResults)
+		{
+			if (Hit.GetActor() && Hit.GetActor()->Implements<UTargetableInterface>())
+			{
+				float Priority = ITargetableInterface::Execute_GetLockPriority(Hit.GetActor());
+				if (Priority > 0.f)
+				{
+					NewHoveredTarget = Hit.GetActor();
+					break;
+				}
+			}
+		}
+	}
+
+	// 悬停目标变化
+	if (NewHoveredTarget != HoveredTarget)
+	{
+		HoveredTarget = NewHoveredTarget;
+	}
+}
+
+void AAlexCharacter::ConfirmLockOn()
+{
+	if (HoveredTarget)
+	{
+		LockedTarget = HoveredTarget;
+		HoveredTarget = nullptr;
+
+		// 通知目标被锁定（让敌人显示标记等）
+		ITargetableInterface::Execute_OnLocked(LockedTarget, GetController());
+		GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green, 
+            FString::Printf(TEXT("LockedTarget: %s"), *LockedTarget->GetName()));
+	}
+	else
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Red, FString::Printf(TEXT("No Target")));
+	}
+}
+
+void AAlexCharacter::CancelLockOn()
+{
+	if (LockedTarget)
+	{
+		ITargetableInterface::Execute_OnUnlocked(LockedTarget, GetController());
+		GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, 
+            FString::Printf(TEXT("UnLocked: %s"), *LockedTarget->GetName()));
+		LockedTarget = nullptr;
+	}
+}
+
+void AAlexCharacter::UpdateLockOnCamera(float DeltaTime)
+{
+	if (!LockedTarget || !GetController()) return;
+
+	// 获取目标位置（接口获取，带高度偏移）
+	FVector TargetLocation = ITargetableInterface::Execute_GetTargetLocation(LockedTarget);
+	FVector ToTarget = TargetLocation - GetActorLocation();
+	ToTarget.Z = 0.f;	// 保持水平，不仰头
+
+	if (!ToTarget.IsNearlyZero())
+	{
+		// 计算目标旋转（Yaw  only）
+		FRotator TargetRotation = ToTarget.GetSafeNormal().Rotation();
+		TargetRotation.Pitch = 0.f;
+		TargetRotation.Roll = 0.f;
+
+
+		FRotator CurrentRotation = SpringArm->GetComponentRotation();
+        FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, CameraRotationSpeed);
+		SpringArm->SetWorldRotation(NewRotation);
+	}
+
+	// 检查目标是否死亡/超出距离，自动解除锁定
+    float Distance = FVector::Distance(GetActorLocation(), LockedTarget->GetActorLocation());
+    if (Distance > LockOnRange * 1.5f)  // 超出 1.5 倍距离自动解除
+    {
+        CancelLockOn();
+    }
 }
 
 void AAlexCharacter::TryAutoVault()
@@ -508,9 +873,67 @@ void AAlexCharacter::OnRoofFlipEnded(UAnimMontage* Montage, bool bInterrupted)
     bHasMovementInput = false;
 }
 
+void AAlexCharacter::PerformWallRunBackFlip()
+{
+	if (ActionState == EActionState::EAS_WallRunFlipping) return;
+
+	if (!WallRunBackFlipMontage)
+	{
+		StopWallRun();  // 没有动画就普通停止墙跑
+		return;
+	}
+
+	bIsWallRunning = false;
+	ActionState = EActionState::EAS_WallRunFlipping;
+
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->SetMovementMode(MOVE_Flying);// 根运动需要 Flying 模式
+
+	PlayAnimation(WallRunBackFlipMontage);
+
+	FVector LaunchDir = (WallDetection->WallNormal).GetSafeNormal();
+	FVector LaunchVel = LaunchDir * 300.f;
+	LaunchCharacter(LaunchVel, true, true);
+
+	FOnMontageEnded EndDelegate;
+	EndDelegate.BindUObject(this, &AAlexCharacter::OnWallRunBackFlipEnded);
+	GetMesh()->GetAnimInstance()->Montage_SetEndDelegate(EndDelegate, WallRunBackFlipMontage);
+
+	if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))
+	{
+		AnimInst->bIsWallRunning = false;
+	}
+
+	// 设置冷却，防止立即重新贴墙
+	WallRunJumpCooldown = WallRunJumpCooldownDuration;
+}
+
+void AAlexCharacter::OnWallRunBackFlipEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	ActionState = EActionState::EAS_Unoccupied;
+
+	// 恢复重力设置
+	GetCharacterMovement()->GravityScale = PreWallRunGravityScale;
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+
+	if (GetCharacterMovement()->IsMovingOnGround())
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	}
+	else
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_Falling);
+	}
+
+	LastMovementInput = FVector2D::ZeroVector;
+	bHasMovementInput = false;
+}
+
 void AAlexCharacter::StartWallRun()
 {
 	bool bIsAutoFromGlide = (ActionState == EActionState::EAS_Gliding);
+
+	if (LastMovementInput.Y < -0.5f) return;
 
 	if (!bRunActive && bIsAutoFromGlide) return;  // 不在奔跑状态，直接返回
 
@@ -611,6 +1034,12 @@ void AAlexCharacter::UpdateWallRun(float DeltaTime)
 {
 	if (!bIsWallRunning || !WallDetection) return;
 
+	if (LastMovementInput.Y < -0.5f)
+	{
+		PerformWallRunBackFlip();
+		return;
+	}
+
 	// 预判楼顶
 	if (CheckApproachingRoof())
 	{
@@ -664,14 +1093,16 @@ void AAlexCharacter::UpdateWallRun(float DeltaTime)
 		{
 			AnimInst->WallRunDirection = WallRunDirection;
 		}
+		if (!WallRunDirection.IsNearlyZero())
+		{
+			GetCharacterMovement()->Velocity = WallRunDirection * WallRunSpeed;
+		}
 	}
 	else
 	{
 		StopWallRun();
 		return;
 	}
-
-	BP_OnUpdateWallRun(DeltaTime);
 }
 
 void AAlexCharacter::StartClimb()
@@ -792,6 +1223,7 @@ void AAlexCharacter::UpdateClimb(float DeltaTime)
 		}*/
 
 		ClimbDirection = (WallRight * LastMovementInput.X + WallUp * LastMovementInput.Y).GetSafeNormal();
+		GetCharacterMovement()->Velocity = ClimbDirection * ClimbSpeed;
 		if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))
 		{
 			AnimInst->ClimbHorizontal = LastMovementInput.X;
@@ -801,6 +1233,7 @@ void AAlexCharacter::UpdateClimb(float DeltaTime)
 	else
 	{
 		ClimbDirection = FVector::ZeroVector;
+		GetCharacterMovement()->Velocity = ClimbDirection;
 		if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))
 		{
 		    AnimInst->ClimbHorizontal = 0.0f;
@@ -808,7 +1241,7 @@ void AAlexCharacter::UpdateClimb(float DeltaTime)
 		}
 	}
 
-	BP_OnUpdateClimb(DeltaTime);
+	//BP_OnUpdateClimb(DeltaTime);
 }
 
 bool AAlexCharacter::CheckClimbMantle()
@@ -985,7 +1418,7 @@ void AAlexCharacter::PlaySkidMontage()
 	if (bIsClimbing) return;  // 攀爬中
 
 	float Speed = GetCharacterMovement()->Velocity.Size2D();
-	if (Speed < 1000.f) return; 
+	if (Speed < 600.f) return; 
 
 	bIsSkidding = true;
 	PlayAnimation(SkidMontage);

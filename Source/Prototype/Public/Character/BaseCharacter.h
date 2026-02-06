@@ -68,6 +68,7 @@ public:
     virtual float GetLockPriority_Implementation() const override;
     virtual void OnLocked_Implementation(AController* Locker) override;
     virtual void OnUnlocked_Implementation(AController* Unlocker) override;
+	virtual float GetTargetSize_Implementation() const override;
 
 	// AttackEnd
 	UFUNCTION(BlueprintCallable, Category="Animation")

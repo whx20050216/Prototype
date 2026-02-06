@@ -5,6 +5,7 @@ enum class EActionState : uint8
 	EAS_Walk UMETA(DisplayName = "Walk"),
 	EAS_Run UMETA(DisplayName = "Run"),
 	EAS_Vaulting UMETA(DisplayName = "Vaulting"),
+	EAS_WallRunFlipping UMETA(DisplayName = "WallRunFlipping"),
 	EAS_WallRunning UMETA(DisplayName = "WallRunning"),
 	EAS_Climbing UMETA(DisplayName = "Climbing"),
 	EAS_Gliding UMETA(DisplayName = "Gliding"),

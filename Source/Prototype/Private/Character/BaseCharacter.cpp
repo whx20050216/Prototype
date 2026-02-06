@@ -4,6 +4,7 @@
 #include "Character/BaseCharacter.h"
 #include "ActorComponent/AttributeComponent.h"
 #include "Components/WidgetComponent.h"
+#include "Components/CapsuleComponent.h"
 
 ABaseCharacter::ABaseCharacter()
 {
@@ -50,6 +51,16 @@ void ABaseCharacter::OnLocked_Implementation(AController* Locker)
 
 void ABaseCharacter::OnUnlocked_Implementation(AController* Unlocker)
 {
+}
+
+float ABaseCharacter::GetTargetSize_Implementation() const
+{
+	// 默认用胶囊体半径，Boss可以在子类Override返回更大值
+    if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+    {
+        return Capsule->GetScaledCapsuleRadius();
+    }
+    return 100.f;
 }
 
 void ABaseCharacter::AttackEnd()

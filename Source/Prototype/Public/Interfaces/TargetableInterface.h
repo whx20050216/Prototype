@@ -36,4 +36,8 @@ public:
 	UFUNCTION(BlueprintNativeEvent, Category="Target")
 	void OnUnlocked(AController* Unlocker);
 	virtual void OnUnlocked_Implementation(AController* Unlocker) {}
+
+	UFUNCTION(BlueprintNativeEvent, Category="Target")
+	float GetTargetSize() const;  // 返回目标半径（cm）
+	virtual float GetTargetSize_Implementation() const { return 100.f; }  // 默认100cm
 };

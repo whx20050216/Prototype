@@ -36,16 +36,10 @@ public:
 	/*蓝图攀爬方法*/
 	UFUNCTION(BlueprintImplementableEvent, Category="Climb")
 	void BP_OnStartClimb();
-	
-	UFUNCTION(BlueprintImplementableEvent, Category="Climb")
-	void BP_OnUpdateClimb(float DeltaTime);
 
 	/* 蓝图墙跑方法 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "WallRun")
 	void BP_OnStartWallRun();
-
-	UFUNCTION(BlueprintImplementableEvent, Category = "WallRun")
-	void BP_OnUpdateWallRun(float DeltaTime);
 
 protected:
 	virtual void BeginPlay() override;
@@ -62,6 +56,8 @@ protected:
 	void DASH();
 	void CLIMB();
 	void ATTACK();
+	void TAB_Pressed();
+	void TAB_Released();
 
 	// 重写父类AttackEnd
 	virtual void AttackEnd() override;
@@ -99,6 +95,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category="AnimMontage")
 	UAnimMontage* ClimbMantleMontage;	// 爬上楼顶动作
 
+	UPROPERTY(EditAnywhere, Category="AnimMontage")
+	UAnimMontage* WallRunBackFlipMontage;	// 墙跑急停后空翻动作
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	UAttributeComponent* AttributeComponent;
 
@@ -114,19 +113,55 @@ private:
 	bool bHasMovementInput = false;			// 是否有移动输入
 
 	/*
+	* 软锁定
+	*/
+	UPROPERTY()
+	bool bIsSelectingTarget = false;  // 是否按住 Tab 选择中
+
+	UPROPERTY()
+	AActor* HoveredTarget = nullptr;   // 当前悬停的目标
+
+	UPROPERTY()
+	AActor* LockedTarget = nullptr;    // 确认锁定的目标
+
+	UPROPERTY(EditAnywhere, Category="LockOn")
+	float LockOnRange = 5000.f;        // 锁定最大距离（5000cm = 50米）
+	
+	UPROPERTY(EditAnywhere, Category="LockOn")
+	float LockOnSphereRadius = 150.f;  // 屏幕中心检测半径（越大越容易选中）
+
+	UPROPERTY(EditAnywhere, Category="LockOn", meta=(ClampMin=1, ClampMax=20))
+	float CameraRotationSpeed = 8.f;
+
+	// 锁定UI
+	UPROPERTY(EditDefaultsOnly, Category = "LockOn|UI")
+	TSubclassOf<UUserWidget> LockOnReticleClass;	// 悬停框（半透明大框）
+
+	UPROPERTY(EditDefaultsOnly, Category = "LockOn|UI")
+	TSubclassOf<UUserWidget> LockOnLockedClass;		// 锁定框（红色实线框）
+
+	UPROPERTY()
+	UUserWidget* HoverWidget;
+
+	UPROPERTY()
+	UUserWidget* LockedWidget;
+
+	void UpdateLockOnUI();
+	void UpdateTargetWidget(AActor* Target, UUserWidget* Widget, APlayerController* PC);
+	bool GetTargetScreenPixelSize(AActor* Target, APlayerController* PC, FVector2D& OutSize, FVector2D& OutCenter);
+	bool GetTargetScreenBounds(AActor* Target, APlayerController* PC, FVector2D& OutMin, FVector2D& OutMax);
+
+	// 核心逻辑
+	void UpdateTargetSelection();      // 按住 Tab 时每帧更新悬停目标
+	void ConfirmLockOn();              // 松开 Tab 确认锁定
+	void CancelLockOn();               // 再按 Tab 取消锁定
+	void UpdateLockOnCamera(float DeltaTime);  // 锁定时更新相机
+
+	/*
 	* 战斗相关
 	*/
 	UPROPERTY()
     bool bIsAttacking = false;  // 攻击状态锁，不依赖动画系统
-
-	/*
-	* 镜头跟随目标
-	*/
-	UPROPERTY()
-	AActor* LockedTarget = nullptr;
-
-	UPROPERTY(EditAnywhere, Category="LockOn", meta=(ClampMin=1, ClampMax=20))
-	float CameraRotationSpeed = 8.f;
 
 	/* 
 	* 自动翻越参数
@@ -196,6 +231,10 @@ private:
 	void PerformRoofFlip();
 	void OnRoofFlipEnded(UAnimMontage* Montage, bool bInterrupted);
 
+	// 墙跑急停后空翻
+	void PerformWallRunBackFlip();
+	void OnWallRunBackFlipEnded(UAnimMontage* Montage, bool bInterrupted);
+
 	// 墙跑方法
 	void StartWallRun();
 	void StopWallRun();
@@ -211,7 +250,7 @@ private:
 	FVector ClimbDirection;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Climb", meta=(AllowPrivateAccess = "true"))
-	float ClimbSpeed = 1.f;           // 攀爬速度
+	float ClimbSpeed = 100.f;           // 攀爬速度
 	
 	UPROPERTY(EditAnywhere, Category="Climb")
 	float ClimbGravityScale = 0.0f;     // 攀爬时重力缩放
@@ -366,6 +405,9 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
 	UInputAction* AttackAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
+	UInputAction* LockOnAction;
 
 	UPROPERTY(VisibleAnywhere)
 	AItem* OverlappingItem;
