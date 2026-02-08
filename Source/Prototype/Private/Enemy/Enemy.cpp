@@ -42,6 +42,7 @@ void AEnemy::Tick(float DeltaTime)
 void AEnemy::ExecuteAttack()
 {
 	if (AttackConfigs.Num() == 0) return;
+	if (bIsAttacking) return;
 
 	// Á¢¼´Ëø¶¨¹¥»÷×´Ì¬£¬·ÀÖ¹ÖØ¸´´¥·¢
 	bIsAttacking = true;

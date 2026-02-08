@@ -187,6 +187,5 @@ void AEnemyAIController::PerformAttackOnPlayer()
     SetFocus(Target);
 
     // 决策4：所有条件满足，攻击
-    SetIsAttacking(true);
     Enemy->ExecuteAttack();
 }
