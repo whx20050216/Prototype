@@ -113,6 +113,19 @@ private:
 	bool bHasMovementInput = false;			// 是否有移动输入
 
 	/*
+	* 动态脚步声（用tag标签实现地面材质识别）
+	*/
+	UFUNCTION(BlueprintCallable, Category="Footstep")
+	void PlayFootstepSound();
+
+	UPROPERTY(EditAnywhere, Category="Footstep")
+	TMap<FName, USoundBase*> FootstepSounds;  // Tag -> Sound 映射
+
+	UPROPERTY(EditAnywhere, Category="Footstep")
+	USoundBase* DefaultFootstepSound;  // 默认音
+
+
+	/*
 	* 软锁定
 	*/
 	UPROPERTY()

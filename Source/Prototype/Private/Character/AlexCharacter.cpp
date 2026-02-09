@@ -16,6 +16,7 @@
 #include "ActorComponent/AttributeComponent.h"
 #include "HUD/HealthWidget.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Kismet/GameplayStatics.h"
 
 AAlexCharacter::AAlexCharacter()
 {
@@ -364,6 +365,7 @@ void AAlexCharacter::CLIMB()
 
 void AAlexCharacter::ATTACK()
 {
+
 	if (bIsAttacking) return;
 	bIsAttacking = true;
 	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("ATTACK")));
@@ -391,6 +393,43 @@ void AAlexCharacter::TAB_Released()
 	{
 		bIsSelectingTarget = false;
 		ConfirmLockOn();
+	}
+}
+
+void AAlexCharacter::PlayFootstepSound()
+{
+	FVector Start = GetActorLocation();
+    FVector End = Start - FVector(0, 0, 100);
+
+	DrawDebugLine(GetWorld(), Start, End, FColor::Red, false, -1, 0, 3.f);
+
+	FHitResult Hit;
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(this);
+
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	{
+		if (AActor* HitActor = Hit.GetActor())
+		{
+			// 遍历配置的Tag-Sound映射，找到匹配就播放
+			for (const auto& Pair : FootstepSounds)
+			{
+				if (HitActor->ActorHasTag(Pair.Key))
+				{
+					if (Pair.Value)
+					{
+						UGameplayStatics::PlaySoundAtLocation(this, Pair.Value, Hit.ImpactPoint);
+					}
+					return;
+				}
+			}
+
+			// 没有匹配到特定Tag，播放默认
+			if (DefaultFootstepSound)
+			{
+				UGameplayStatics::PlaySoundAtLocation(this, DefaultFootstepSound, Hit.ImpactPoint);
+			}
+		}
 	}
 }
 
@@ -1535,7 +1574,6 @@ bool AAlexCharacter::ConsumeDashIfAvailable()
 void AAlexCharacter::AttackEnd()
 {
 	Super::AttackEnd();
-
 	bIsAttacking = false;
 }
 
