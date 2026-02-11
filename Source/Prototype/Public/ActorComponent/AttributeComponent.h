@@ -54,6 +54,9 @@ public:
 
     UFUNCTION(BlueprintPure, Category="Attributes")
     float GetMaxMana() const { return MaxMana; }
+
+    UFUNCTION(BlueprintPure, Category="Attributes")
+    bool IsDead() const { return Health <= 0.f; }
     
 protected:
 	virtual void BeginPlay() override;

@@ -367,9 +367,33 @@ void AAlexCharacter::ATTACK()
 {
 
 	if (bIsAttacking) return;
+
+	const FMorphConfig& Config = GetCurrentMorphConfig();
+
+	// 检查配置有效性
+	if (Config.LightComboSections.Num() == 0 || !Config.ComboMontage)
+	{
+		return;
+	}
+
 	bIsAttacking = true;
+
+	// 获取当前连段段的 Section 名
+	FName SectionName = NAME_None;
+	if (Config.LightComboSections.IsValidIndex(CurrentComboStep))
+	{
+		SectionName = Config.LightComboSections[CurrentComboStep];
+	}
+	else
+	{
+		// 超出范围（保险处理）：回到第一段
+		CurrentComboStep = 0;
+		SectionName = Config.LightComboSections[CurrentComboStep];
+	}
+
 	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("ATTACK")));
-	PlayAnimationWithSections(AnimationConfig.Montage, AnimationConfig.SectionSequence, AnimationConfig.PlayRate);
+	PlayMontageSection(Config.ComboMontage, SectionName, 1.0f);
+	//PlayAnimationWithSections(AnimationConfig.Montage, AnimationConfig.SectionSequence, AnimationConfig.PlayRate);
 }
 
 void AAlexCharacter::TAB_Pressed()
@@ -394,6 +418,18 @@ void AAlexCharacter::TAB_Released()
 		bIsSelectingTarget = false;
 		ConfirmLockOn();
 	}
+}
+
+const FMorphConfig& AAlexCharacter::GetCurrentMorphConfig() const
+{
+	if (MorphConfigs.IsValidIndex(CurrentMorphIndex))
+	{
+		return MorphConfigs[CurrentMorphIndex];
+	}
+
+	// 保险：返回空配置避免崩溃
+	static FMorphConfig EmptyConfig;
+	return EmptyConfig;
 }
 
 void AAlexCharacter::PlayFootstepSound()

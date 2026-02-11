@@ -25,3 +25,13 @@ enum class EDetectionResult : uint8
 	VaultPossible UMETA(DisplayName = "可翻越"),          // 矮障碍
 	Invalid UMETA(DisplayName = "无效")                    // 不满足条件
 };
+
+UENUM(BlueprintType)
+enum class EMorphType : uint8
+{
+	EMT_Fist        UMETA(DisplayName = "Fist"),        // 拳
+    EMT_Claw        UMETA(DisplayName = "Claw"),        // 爪
+    EMT_Blade       UMETA(DisplayName = "Blade"),       // 刀
+    EMT_Whip        UMETA(DisplayName = "Whip"),        // 鞭
+    EMT_Hammer      UMETA(DisplayName = "Hammer")       // 锤
+};

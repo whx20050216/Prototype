@@ -11,6 +11,7 @@ class UAnimMontage;
 class AProjectile;
 class UBlackboardComponent;
 class UBehaviorTree;
+class UHealthWidget;
 
 // 攻击类型枚举
 UENUM(BlueprintType)
@@ -123,6 +124,38 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Attributes")
+	UAttributeComponent* AttributeComp;
+
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
+	TSubclassOf<UHealthWidget> HealthWidgetClass;
+
+	UPROPERTY()
+	UHealthWidget* HealthWidget;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="UI")
+    UWidgetComponent* HealthBarComp;
+
+	void ShowHealthBar();
+	void HideHealthBar();
+
+	// 脱战隐藏定时器（单次）
+    FTimerHandle HideHealthBarTimer;
+    
+    // 脱战延迟时间（秒）
+    UPROPERTY(EditAnywhere, Category="UI")
+    float HealthBarHideDelay = 5.0f;
+
+    // 血量变化回调（显示时机）
+    UFUNCTION()
+    void HandleHealthChanged(float CurrentHealth, float MaxHealth, float Delta);
+
+	// 死亡处理
+    UFUNCTION()
+    void OnHealthDepleted();
 
 	// 感知回调（看到玩家时触发）
 	UFUNCTION()

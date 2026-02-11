@@ -10,6 +10,9 @@
 #include "AIController.h"
 #include "Items/Projectile.h"
 #include "AI/EnemyAIController.h"
+#include "ActorComponent/AttributeComponent.h"
+#include "HUD/HealthWidget.h"
+#include "Components/WidgetComponent.h"
 
 AEnemy::AEnemy()
 {
@@ -22,6 +25,17 @@ AEnemy::AEnemy()
 	// 指定AIController类
 	AIControllerClass = AEnemyAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+
+	AttributeComp = CreateDefaultSubobject<UAttributeComponent>(TEXT("AttributeComp"));
+
+	HealthBarComp = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthBarComp"));
+	HealthBarComp->SetupAttachment(GetRootComponent());
+    HealthBarComp->SetRelativeLocation(FVector(0.f, 0.f, 120.f));  // 头顶120cm
+    HealthBarComp->SetWidgetSpace(EWidgetSpace::World);
+	HealthBarComp->SetDrawSize(FVector2D(100.f, 10.f));            // UI大小（像素）
+    HealthBarComp->SetPivot(FVector2D(0.5f, 0.5f));
+	HealthBarComp->SetWidgetSpace(EWidgetSpace::Screen);
+	HealthBarComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
 void AEnemy::Tick(float DeltaTime)
@@ -111,6 +125,82 @@ void AEnemy::BeginPlay()
 
 	// 绑定动画结束事件
 	OnMontageEnded.AddDynamic(this, &AEnemy::OnAnimMontageEnded);
+
+	if (HealthWidgetClass)  // 检查蓝图是否指定了类
+	{
+		HealthBarComp->SetWidgetClass(HealthWidgetClass);
+        HealthBarComp->InitWidget();
+
+		HealthWidget = Cast<UHealthWidget>(HealthBarComp->GetWidget());
+	    if (HealthWidget)
+	    {   
+	        if (AttributeComp)
+	        {
+				AttributeComp->OnHealthChanged.AddDynamic(this, &AEnemy::HandleHealthChanged);
+				AttributeComp->OnDeath.AddDynamic(this, &AEnemy::OnHealthDepleted);
+
+	            HealthWidget->BindToAttributeComponent(AttributeComp);
+	        }
+	    }
+	}
+
+	HideHealthBar();
+}
+
+float AEnemy::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
+{
+	float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+	if (AttributeComp && ActualDamage > 0.f)
+	{
+		AttributeComp->ApplyHealthChange(-ActualDamage);
+		if (!AttributeComp->IsDead())
+		{
+			//StartStun();
+		}
+	}
+return ActualDamage;
+}
+
+void AEnemy::ShowHealthBar()
+{
+	if (HealthBarComp)
+	{
+		HealthBarComp->SetVisibility(true);
+	}
+}
+
+void AEnemy::HideHealthBar()
+{
+	if (HealthBarComp)
+	{
+		HealthBarComp->SetVisibility(false);
+	}
+}
+
+void AEnemy::HandleHealthChanged(float CurrentHealth, float MaxHealth, float Delta)
+{
+	// 只有受伤（Delta < 0）且未死亡时才显示
+	if (Delta < 0 && CurrentHealth>0)
+	{
+		ShowHealthBar();
+
+		// 重置脱战计时：清除旧的，启动新的5秒定时器
+        GetWorldTimerManager().ClearTimer(HideHealthBarTimer);
+        GetWorldTimerManager().SetTimer(
+            HideHealthBarTimer,
+            this,
+            &AEnemy::HideHealthBar,
+            HealthBarHideDelay,
+            false  // 单次执行，不循环
+        );
+	}
+}
+
+void AEnemy::OnHealthDepleted()
+{
+	GetWorldTimerManager().ClearTimer(HideHealthBarTimer);
+	HideHealthBar();
+	Destroy();
 }
 
 void AEnemy::OnSeePlayer(APawn* Pawn)
@@ -392,4 +482,9 @@ void AEnemy::OnAttackHit()
 
 void AEnemy::OnAttackCooldownEnd()
 {
+	bIsAttacking = false;
+	if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+	{
+		AIController->SetIsAttacking(false);
+	}
 }

@@ -17,6 +17,51 @@ class UAnimMontage;
 class UWallDetectionComponent;
 class UHealthWidget;
 class AItem;
+class UNiagaraSystem;
+
+USTRUCT(BlueprintType)
+struct FMorphConfig
+{
+	GENERATED_BODY()
+
+	// 形态类型标识
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Morph")
+	EMorphType Type = EMorphType::EMT_Fist;
+
+	// 检测参数（每种形态不同）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
+	float MeleeRadius = 100.f;		// 拳80，爪100，刀120，鞭200，锤150
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
+	float AttackAngle = 90.f;       // 刀90°，鞭360°（全周），锤120°
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
+    float Damage = 25.f;
+
+	// 连段配置（每种形态独立）
+    // 拳：["Jab1", "Jab2", "Uppercut"]
+    // 鞭：["Swipe_Start", "Swipe_Mid", "Swipe_End"]
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combo")
+    TArray<FName> LightComboSections;
+
+	// 该形态的蒙太奇（如果每种形态用不同蒙太奇文件）
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation")
+    UAnimMontage* ComboMontage = nullptr;
+
+	// 特殊能力
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Special")
+    bool bCanCharge = false;        // 比如锤可以蓄力
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Special")
+    bool bIsMultiHit = false;       // 鞭子是否多次判定（true的话动画里加多个通知）
+
+	// 切换特效（身体变形时的视觉反馈）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="VFX")
+    UNiagaraSystem* SwitchEffect = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SFX")
+    USoundBase* SwitchSound = nullptr;
+};
 
 UCLASS()
 class PROTOTYPE_API AAlexCharacter : public ABaseCharacter, public IPickupInterface
@@ -113,6 +158,32 @@ private:
 	bool bHasMovementInput = false;			// 是否有移动输入
 
 	/*
+	* 战斗相关
+	*/
+	UPROPERTY()
+    bool bIsAttacking = false;  // 攻击状态锁，不依赖动画系统
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta = (AllowPrivateAccess = "true"))
+	TArray<FMorphConfig> MorphConfigs;
+
+	// 当前形态索引
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Combat", meta = (AllowPrivateAccess = "true"))
+	int32 CurrentMorphIndex = 0;
+
+	// 当前连段进度（相对于当前形态）
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Combat", meta = (AllowPrivateAccess = "true"))
+	int32 CurrentComboStep = 0;
+
+	// 形态切换（供输入调用）
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	void SwitchMorph(int32 NewMorphIndex);
+
+	// 重写攻击命中（使用形态配置）
+	void OnAttackHit();
+
+	const FMorphConfig& GetCurrentMorphConfig() const;
+
+	/*
 	* 动态脚步声（用tag标签实现地面材质识别）
 	*/
 	UFUNCTION(BlueprintCallable, Category="Footstep")
@@ -169,12 +240,6 @@ private:
 	void ConfirmLockOn();              // 松开 Tab 确认锁定
 	void CancelLockOn();               // 再按 Tab 取消锁定
 	void UpdateLockOnCamera(float DeltaTime);  // 锁定时更新相机
-
-	/*
-	* 战斗相关
-	*/
-	UPROPERTY()
-    bool bIsAttacking = false;  // 攻击状态锁，不依赖动画系统
 
 	/* 
 	* 自动翻越参数
