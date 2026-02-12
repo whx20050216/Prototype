@@ -17,6 +17,7 @@
 #include "HUD/HealthWidget.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Kismet/GameplayStatics.h"
+#include "Enemy/Enemy.h"
 
 AAlexCharacter::AAlexCharacter()
 {
@@ -418,6 +419,83 @@ void AAlexCharacter::TAB_Released()
 		bIsSelectingTarget = false;
 		ConfirmLockOn();
 	}
+}
+
+void AAlexCharacter::SwitchMorph(int32 NewMorphIndex)
+{
+	if (!MorphConfigs.IsValidIndex(NewMorphIndex)) return;
+    if (NewMorphIndex == CurrentMorphIndex) return;
+
+	// 打断当前攻击
+    StopAllMontages();
+    bIsAttacking = false;
+    CurrentComboStep = 0;  // 新形态从第一段开始
+
+	// 记录旧索引（用于特效）
+    int32 OldIndex = CurrentMorphIndex;
+    CurrentMorphIndex = NewMorphIndex;
+
+	const FMorphConfig& NewConfig = GetCurrentMorphConfig();
+
+	// 播放切换特效（如果有）
+    /*if (NewConfig.SwitchEffect)
+    {
+        UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+            this, 
+            NewConfig.SwitchEffect, 
+            GetActorLocation(), 
+            GetActorRotation()
+        );
+    }*/
+
+    /*if (NewConfig.SwitchSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, NewConfig.SwitchSound, GetActorLocation());
+    }*/
+}
+
+void AAlexCharacter::OnAttackHit()
+{
+	if (!bIsAttacking) return;
+
+	const FMorphConfig& Config = GetCurrentMorphConfig();
+
+	// 使用当前形态的检测参数
+	FVector Start = GetActorLocation() + FVector(0, 0, 50);
+    FCollisionShape Sphere = FCollisionShape::MakeSphere(Config.MeleeRadius);
+
+	TArray<FHitResult> HitResults;
+	bool bHit = GetWorld()->SweepMultiByChannel(
+        HitResults, 
+        Start, Start, 
+        FQuat::Identity, 
+        ECC_Pawn, 
+        Sphere
+    );
+
+	if (bHit)
+	{
+		for (auto& Hit : HitResults)
+		{
+			if (AEnemy* Enemy = Cast<AEnemy>(Hit.GetActor()))
+			{
+				// 统一扇形检查（鞭子200°，拳90°，都在Config里配）
+				FVector ToEnemy = (Enemy->GetActorLocation() - GetActorLocation()).GetSafeNormal();
+				float AngleDeg = FMath::Acos(FVector::DotProduct(GetActorForwardVector(), ToEnemy)) * (180.f / PI);
+				if (AngleDeg <= Config.AttackAngle / 2.f)  // 统一判断
+				{
+					 UGameplayStatics::ApplyDamage(Enemy, Config.Damage, GetController(), this, UDamageType::StaticClass());
+					 // 单目标武器（拳/爪/刀/锤）：命中一个就停
+                    // 多目标武器（鞭子）：扫一片，继续检测其他敌人
+                    if (!Config.bIsMultiHit)
+                    {
+                        break;
+                    }
+				}
+			}
+		}
+	}
+	DrawDebugSphere(GetWorld(), Start, Config.MeleeRadius, 12, FColor::Red, false, 0.1f);
 }
 
 const FMorphConfig& AAlexCharacter::GetCurrentMorphConfig() const
@@ -1609,8 +1687,22 @@ bool AAlexCharacter::ConsumeDashIfAvailable()
 
 void AAlexCharacter::AttackEnd()
 {
-	Super::AttackEnd();
-	bIsAttacking = false;
+	const FMorphConfig& Config = GetCurrentMorphConfig();
+    int32 NextStep = CurrentComboStep + 1;
+    
+    if (Config.LightComboSections.IsValidIndex(NextStep))
+    {
+        // 有下一段：自动衔接
+        CurrentComboStep = NextStep;
+        bIsAttacking = false;
+        ATTACK();  // 播放下一段
+    }
+    else
+    {
+        // 连段结束，重置
+        CurrentComboStep = 0;
+        bIsAttacking = false;
+    }
 }
 
 float AAlexCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
