@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Character/BaseCharacter.h"
+#include "AbilitySystemInterface.h"
 #include "Interfaces/PickupInterface.h"
 #include "Character/CharacterTypes.h"
 #include "AlexCharacter.generated.h"
@@ -18,6 +19,8 @@ class UWallDetectionComponent;
 class UHealthWidget;
 class AItem;
 class UNiagaraSystem;
+class UAbilitySystemComponent;
+class UAlexAttributeSet;
 
 USTRUCT(BlueprintType)
 struct FMorphConfig
@@ -64,7 +67,7 @@ struct FMorphConfig
 };
 
 UCLASS()
-class PROTOTYPE_API AAlexCharacter : public ABaseCharacter, public IPickupInterface
+class PROTOTYPE_API AAlexCharacter : public ABaseCharacter, public IPickupInterface, public IAbilitySystemInterface  
 {
 	GENERATED_BODY()
 	
@@ -74,6 +77,13 @@ public:
 	void ResetRun();
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void SetOverlappingItem(AItem* Item) override;
+
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override
+	{
+		return AbilitySystemComponent;
+	}
+
+	UAlexAttributeSet* GetAttributeSet() const { return AttributeSet; }
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WallDetection")
 	UWallDetectionComponent* WallDetection;
@@ -152,6 +162,16 @@ protected:
 	// Widget实例
     UPROPERTY()
     UHealthWidget* HealthWidget;
+
+	// GAS
+	UPROPERTY(VisibleAnywhere, Category = "GAS")
+	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+
+	UPROPERTY(VisibleAnywhere, Category = "GAS")
+	TObjectPtr<UAlexAttributeSet> AttributeSet;
+
+	// GAS初始化（必须）
+    virtual void PossessedBy(AController* NewController) override;
 
 private:
 	UPROPERTY(BlueprintReadOnly, Category="Input", meta = (AllowPrivateAccess = "true"))

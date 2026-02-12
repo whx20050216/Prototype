@@ -18,6 +18,8 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Kismet/GameplayStatics.h"
 #include "Enemy/Enemy.h"
+#include "AbilitySystemComponent.h"
+#include "GAS/AlexAttributeSet.h"
 
 AAlexCharacter::AAlexCharacter()
 {
@@ -47,6 +49,11 @@ AAlexCharacter::AAlexCharacter()
 	AttributeComponent = CreateDefaultSubobject<UAttributeComponent>(TEXT("AttributeComponent"));
 
 	LockPriority = 0.f;
+
+	// GAS
+	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
+	AbilitySystemComponent->SetIsReplicated(true);	//开启网络复制（即使单机也建议开，因为GAS很多功能依赖这个开关）
+	AttributeSet = CreateDefaultSubobject<UAlexAttributeSet>(TEXT("AttributeSet"));
 }
 
 void AAlexCharacter::Tick(float DeltaTime)
@@ -418,6 +425,16 @@ void AAlexCharacter::TAB_Released()
 	{
 		bIsSelectingTarget = false;
 		ConfirmLockOn();
+	}
+}
+
+void AAlexCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	}
 }
 
