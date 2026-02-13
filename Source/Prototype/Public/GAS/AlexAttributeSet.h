@@ -23,22 +23,32 @@ public:
     UAlexAttributeSet();
 
     // 生命值
-    UPROPERTY(BlueprintReadOnly, Category="Attributes", ReplicatedUsing=OnRep_Health)
+    UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing = OnRep_Health)
     FGameplayAttributeData Health;
     ATTRIBUTE_ACCESSORS(UAlexAttributeSet, Health)
     
-    UPROPERTY(BlueprintReadOnly, Category="Attributes", ReplicatedUsing=OnRep_MaxHealth)
+    UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing = OnRep_MaxHealth)
     FGameplayAttributeData MaxHealth;
     ATTRIBUTE_ACCESSORS(UAlexAttributeSet, MaxHealth)
     
     // 耐力值
-    UPROPERTY(BlueprintReadOnly, Category="Attributes", ReplicatedUsing=OnRep_Stamina)
-    FGameplayAttributeData Stamina;
-    ATTRIBUTE_ACCESSORS(UAlexAttributeSet, Stamina)
+    UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing = OnRep_Mana)
+    FGameplayAttributeData Mana;
+    ATTRIBUTE_ACCESSORS(UAlexAttributeSet, Mana)
     
-    UPROPERTY(BlueprintReadOnly, Category="Attributes", ReplicatedUsing=OnRep_MaxStamina)
-    FGameplayAttributeData MaxStamina;
-    ATTRIBUTE_ACCESSORS(UAlexAttributeSet, MaxStamina)
+    UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing = OnRep_MaxMana)
+    FGameplayAttributeData MaxMana;
+    ATTRIBUTE_ACCESSORS(UAlexAttributeSet, MaxMana)
+
+    // 冲刺次数
+    UPROPERTY(BlueprintReadOnly, Category = "Attributes", ReplicatedUsing = OnRep_DashCharges)
+    FGameplayAttributeData DashCharges;
+    ATTRIBUTE_ACCESSORS(UAlexAttributeSet, DashCharges)
+
+	// 最大冲刺次数（升级时修改这个）
+    UPROPERTY(BlueprintReadOnly, Category="Attributes", ReplicatedUsing=OnRep_MaxDashCharges)
+    FGameplayAttributeData MaxDashCharges;
+    ATTRIBUTE_ACCESSORS(UAlexAttributeSet, MaxDashCharges)
 
     // 回调函数（用于调试）
     UFUNCTION()
@@ -48,10 +58,16 @@ public:
     void OnRep_MaxHealth(const FGameplayAttributeData& OldValue) const;
     
     UFUNCTION()
-    void OnRep_Stamina(const FGameplayAttributeData& OldValue) const;
+    void OnRep_Mana(const FGameplayAttributeData& OldValue) const;
     
     UFUNCTION()
-    void OnRep_MaxStamina(const FGameplayAttributeData& OldValue) const;
+    void OnRep_MaxMana(const FGameplayAttributeData& OldValue) const;
+
+	UFUNCTION()
+    void OnRep_DashCharges(const FGameplayAttributeData& OldValue) const;
+    
+    UFUNCTION()
+    void OnRep_MaxDashCharges(const FGameplayAttributeData& OldValue) const;
     
     // 服务器端验证，防止数据异常
     virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;

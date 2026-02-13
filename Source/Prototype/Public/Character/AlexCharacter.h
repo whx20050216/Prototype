@@ -21,6 +21,7 @@ class AItem;
 class UNiagaraSystem;
 class UAbilitySystemComponent;
 class UAlexAttributeSet;
+class UGameplayAbility;
 
 USTRUCT(BlueprintType)
 struct FMorphConfig
@@ -119,8 +120,8 @@ protected:
 
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
-	UFUNCTION()
-	void DashEnd();
+	//UFUNCTION()
+	//void DashEnd();
 
 	virtual void Landed(const FHitResult& Hit) override;	// 着陆触发事件
 	/*
@@ -451,19 +452,8 @@ private:
 	/* 
 	 *冲刺参数 
 	 */
-	UPROPERTY(EditAnywhere, Category="Dash")
-	float AirDashSpeed = 10000.f;		// 空中冲刺速度
-
-	UPROPERTY()
-	float DashDuration = 0.2f;		// 冲刺持续时间
-
-	bool ConsumeDashIfAvailable();				// 是否正在冲刺
-
-	UPROPERTY(EditAnywhere, Category="Dash")
-	int DashCount = 2;				// 冲刺次数
-
-	FTimerHandle DashHandle;		// 冲刺计时器
-
+	UPROPERTY(EditDefaultsOnly, Category = "GAS")
+	TSubclassOf<UGameplayAbility> DashAbilityClass;
 	
 	/*
 	*	镜头相关

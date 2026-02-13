@@ -346,17 +346,20 @@ void AAlexCharacter::RUN()
 
 void AAlexCharacter::DASH()
 {
-	if (bIsClimbing) return;
-	if (!ConsumeDashIfAvailable()) return;
-	FVector OldSpeed = GetCharacterMovement()->Velocity;
-	OldSpeed.Z = 0.f;
-	GetCharacterMovement()->Velocity = GetActorForwardVector() * AirDashSpeed;
-	if (DashMontage)
+	if (!AbilitySystemComponent) return;
+
+	bool bWasGliding = (ActionState == EActionState::EAS_Gliding);
+
+	FGameplayTagContainer TagContainer;
+    TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Dash")));
+    
+    // 复数形式 Abilities，参数是 Container
+    bool bSuccess = AbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
+
+	if (bSuccess && bWasGliding)
 	{
-		PlayMontageSection(DashMontage, FName("Dash"));
 		StopGlide();
 	}
-	GetWorld()->GetTimerManager().SetTimer(DashHandle, this, &AAlexCharacter::DashEnd, DashDuration, false);
 }
 
 void AAlexCharacter::CLIMB()
@@ -436,6 +439,11 @@ void AAlexCharacter::PossessedBy(AController* NewController)
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	}
+	if (DashAbilityClass)
+    {
+        FGameplayAbilitySpec Spec(DashAbilityClass, 1, -1, this);
+        AbilitySystemComponent->GiveAbility(Spec);
+    }
 }
 
 void AAlexCharacter::SwitchMorph(int32 NewMorphIndex)
@@ -1041,6 +1049,12 @@ void AAlexCharacter::OnRoofFlipEnded(UAnimMontage* Montage, bool bInterrupted)
 
 	LastMovementInput = FVector2D::ZeroVector;
     bHasMovementInput = false;
+
+	if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->RemoveLooseGameplayTag(
+            FGameplayTag::RequestGameplayTag(FName("State.WallRunning")));
+    }
 }
 
 void AAlexCharacter::PerformWallRunBackFlip()
@@ -1135,6 +1149,13 @@ void AAlexCharacter::StartWallRun()
 		bHasMovementInput = !SavedInput.IsNearlyZero();
 	}
 
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->AddLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.WallRunning")));
+	}
+	//重置Dash次数
+	if (AttributeSet) AttributeSet->SetDashCharges(AttributeSet->GetMaxDashCharges());
+
 	// 1. 计算墙跑方向（从UpdateWallRun提取的局部逻辑）
     FVector WallUp = WallDetection->WallNormal;
     if (FMath::Abs(WallUp.Z) > 0.9f)
@@ -1155,7 +1176,6 @@ void AAlexCharacter::StartWallRun()
 
 	bIsWallRunning = true;
 	ActionState = EActionState::EAS_WallRunning;
-	DashCount = 2;		//重置Dash次数
 
 	PreWallRunGravityScale = GetCharacterMovement()->GravityScale;
 
@@ -1196,6 +1216,11 @@ void AAlexCharacter::StopWallRun()
 	{
 		AnimInst->bIsWallRunning = false;
 	}
+
+	if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.WallRunning")));
+    }
 
 	ResetRun();
 }
@@ -1296,6 +1321,20 @@ void AAlexCharacter::StartClimb()
 
 	if (bIsClimbing) return;
 
+	if (AbilitySystemComponent)
+    {
+        FGameplayTag ClimbTag = FGameplayTag::RequestGameplayTag(FName("State.Climbing"));
+        if (ClimbTag.IsValid())
+        {
+            AbilitySystemComponent->AddLooseGameplayTag(ClimbTag);
+            UE_LOG(LogTemp, Warning, TEXT("Tag added successfully: %s"), *ClimbTag.ToString());
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("State.Climbing Tag is INVALID! Check DT_GameplayTags"));
+        }
+    }
+
 	bIsClimbing = true;
 	ActionState = EActionState::EAS_Climbing;
 
@@ -1323,6 +1362,11 @@ void AAlexCharacter::StopClimb()
 
 	bIsClimbing = false;
 	ActionState = EActionState::EAS_Unoccupied;
+
+	if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Climbing")));
+    }
 
 	GetCharacterMovement()->GravityScale = PreClimbGravityScale;
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
@@ -1456,6 +1500,11 @@ void AAlexCharacter::StartGlide()
 	ActionState = EActionState::EAS_Gliding;
 	bLockMove = false;
 
+	if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->AddLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Gliding")));
+    }
+
 	// 播放开始滑翔过渡动画
     if (GlideMontage)
     {
@@ -1488,6 +1537,11 @@ void AAlexCharacter::StopGlide()
 	ActionState = EActionState::EAS_Unoccupied;
 	CurrentGlideTilt = 0.f;
 	LastMovementInput = FVector2D::ZeroVector;
+
+	if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Gliding")));
+    }
 
 	// 重置动画实例
     if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))
@@ -1689,19 +1743,6 @@ void AAlexCharacter::ExecuteChargeJump()
 	CurrentChargeTime = 0.f;
 }
 
-bool AAlexCharacter::ConsumeDashIfAvailable()
-{
-	if (GetCharacterMovement()->IsFalling())
-	{
-		if (DashCount > 0)
-		{
-			DashCount--;
-			return true;
-		}
-	}
-	return false;
-}
-
 void AAlexCharacter::AttackEnd()
 {
 	const FMorphConfig& Config = GetCurrentMorphConfig();
@@ -1737,16 +1778,11 @@ float AAlexCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageE
 	return ActualDamage;
 }
 
-void AAlexCharacter::DashEnd()
-{
-	GetCharacterMovement()->Velocity *= 0.2f;
-}
-
 void AAlexCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 
-	DashCount = 2;
+	if (AttributeSet) AttributeSet->SetDashCharges(AttributeSet->GetMaxDashCharges());
 
 	// 确保停止滑翔
     StopGlide();
