@@ -7,6 +7,7 @@
 #include "HealthWidget.generated.h"
 
 class UAttributeComponent;
+class UAlexAttributeSet;
 class UProgressBar;
 class UTextBlock;
 
@@ -16,9 +17,11 @@ class PROTOTYPE_API UHealthWidget : public UUserWidget
 	GENERATED_BODY()
 	
 public:
-	// 初始化时绑定Component（在PlayerController或Character里调用）
-    UFUNCTION(BlueprintCallable, Category="UI")
-    void BindToAttributeComponent(UAttributeComponent* AttributeComp);
+	UFUNCTION(BlueprintCallable, Category="UI")
+	void BindToAttributeSet(UAlexAttributeSet* AttributeSet);
+
+	UFUNCTION(BlueprintCallable, Category="UI")// Enemy还在用
+	void BindToAttributeComponent(UAttributeComponent* AttributeComp);
 
 protected:
 	UPROPERTY(meta=(BindWidget, OptionalWidget))
@@ -27,21 +30,26 @@ protected:
 	UPROPERTY(meta=(BindWidget, OptionalWidget))  //OptionalWidget防止蓝图没放这个控件就报错
     UTextBlock* Text_Health;  //建议加上文本显示
 
-	UPROPERTY(meta=(BideWidget, OptionalWidget))
+	UPROPERTY(meta=(BindWidget, OptionalWidget))
 	UProgressBar* Bar_Mana;
 
 	UPROPERTY(meta=(BindWidget, OptionalWidget))
 	UTextBlock* Text_Mana;
 
 	UPROPERTY()
+	UAlexAttributeSet* BoundAttributeSet;
+
+	void OnHealthChangedGAS();
+	void OnManaChangedGAS();
+
+	UPROPERTY()
     UAttributeComponent* BoundAttributeComp;
 
-	// 委托回调
-    UFUNCTION()
-    void OnHealthChanged(float CurrentHealth, float MaxHealth, float Delta);
-
 	UFUNCTION()
-	void OnManaChanged(float CurrentMana, float MaxMana, float Delta);
+    void OnHealthChanged(float CurrentHealth, float MaxHealth, float Delta);
+    
+    UFUNCTION()
+    void OnManaChanged(float CurrentMana, float MaxMana, float Delta);
 
 	// 更新UI显示
     void UpdateHealthDisplay(float CurrentHealth, float MaxHealth);

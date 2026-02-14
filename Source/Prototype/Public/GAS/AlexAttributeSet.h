@@ -50,6 +50,11 @@ public:
     FGameplayAttributeData MaxDashCharges;
     ATTRIBUTE_ACCESSORS(UAlexAttributeSet, MaxDashCharges)
 
+    // 委托（用于UI绑定）
+    FSimpleDelegate OnHealthChanged;
+    FSimpleDelegate OnManaChanged;
+
+protected:
     // 回调函数（用于调试）
     UFUNCTION()
     void OnRep_Health(const FGameplayAttributeData& OldValue) const;
@@ -62,6 +67,9 @@ public:
     
     UFUNCTION()
     void OnRep_MaxMana(const FGameplayAttributeData& OldValue) const;
+
+	// GAS 回调：值变化时触发
+    virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
 
 	UFUNCTION()
     void OnRep_DashCharges(const FGameplayAttributeData& OldValue) const;

@@ -22,6 +22,7 @@ class UNiagaraSystem;
 class UAbilitySystemComponent;
 class UAlexAttributeSet;
 class UGameplayAbility;
+class UGameplayEffect;
 
 USTRUCT(BlueprintType)
 struct FMorphConfig
@@ -97,6 +98,19 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "WallRun")
 	void BP_OnStartWallRun();
 
+	// 获取当前形态配置
+	const FMorphConfig& GetCurrentMorphConfig() const;
+
+	// 连击管理（给GA）
+    UFUNCTION(BlueprintCallable, Category="Combat")
+    void ResetAttackCombo() { CurrentComboStep = 0; }
+    
+    UFUNCTION(BlueprintCallable, Category="Combat")
+    void AdvanceAttackCombo() { CurrentComboStep++; }
+    
+    UFUNCTION(BlueprintCallable, Category="Combat")
+    int32 GetAttackComboStep() const { return CurrentComboStep; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -116,12 +130,9 @@ protected:
 	void TAB_Released();
 
 	// 重写父类AttackEnd
-	virtual void AttackEnd() override;
+	//virtual void AttackEnd() override;
 
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
-
-	//UFUNCTION()
-	//void DashEnd();
 
 	virtual void Landed(const FHitResult& Hit) override;	// 着陆触发事件
 	/*
@@ -154,9 +165,6 @@ protected:
 	UPROPERTY(EditAnywhere, Category="AnimMontage")
 	UAnimMontage* WallRunBackFlipMontage;	// 墙跑急停后空翻动作
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-	UAttributeComponent* AttributeComponent;
-
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
     TSubclassOf<UHealthWidget> HealthWidgetClass;
 
@@ -170,6 +178,17 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "GAS")
 	TObjectPtr<UAlexAttributeSet> AttributeSet;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "GAS|Abilities")
+	TSubclassOf<UGameplayAbility> AttackAbilityClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "GAS|Effects")
+	TSubclassOf<UGameplayEffect> DamageEffectClass;
+
+	// 死亡委托（给 UI 或 GameMode 监听）
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterDeath, AActor*, Victim);
+	UPROPERTY(BlueprintAssignable)
+	FOnCharacterDeath OnCharacterDeath;
 
 	// GAS初始化（必须）
     virtual void PossessedBy(AController* NewController) override;
@@ -181,9 +200,6 @@ private:
 	/*
 	* 战斗相关
 	*/
-	UPROPERTY()
-    bool bIsAttacking = false;  // 攻击状态锁，不依赖动画系统
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta = (AllowPrivateAccess = "true"))
 	TArray<FMorphConfig> MorphConfigs;
 
@@ -198,11 +214,6 @@ private:
 	// 形态切换（供输入调用）
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void SwitchMorph(int32 NewMorphIndex);
-
-	// 重写攻击命中（使用形态配置）
-	void OnAttackHit();
-
-	const FMorphConfig& GetCurrentMorphConfig() const;
 
 	/*
 	* 动态脚步声（用tag标签实现地面材质识别）

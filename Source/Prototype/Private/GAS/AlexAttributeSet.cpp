@@ -18,6 +18,8 @@ UAlexAttributeSet::UAlexAttributeSet()
 void UAlexAttributeSet::OnRep_Health(const FGameplayAttributeData& OldValue) const
 {
 	UE_LOG(LogTemp, Log, TEXT("Health Replicated: %f"), GetHealth());
+    GAMEPLAYATTRIBUTE_REPNOTIFY(UAlexAttributeSet, Health, OldValue);
+    OnHealthChanged.ExecuteIfBound();
 }
 
 void UAlexAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldValue) const
@@ -27,10 +29,26 @@ void UAlexAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldValue) 
 void UAlexAttributeSet::OnRep_Mana(const FGameplayAttributeData& OldValue) const
 {
 	UE_LOG(LogTemp, Log, TEXT("Mana Replicated: %f"), GetMana());
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAlexAttributeSet, Mana, OldValue);
+    OnManaChanged.ExecuteIfBound();
 }
 
 void UAlexAttributeSet::OnRep_MaxMana(const FGameplayAttributeData& OldValue) const
 {
+}
+
+void UAlexAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
+{
+    Super::PostAttributeChange(Attribute, OldValue, NewValue);
+
+    if (Attribute == GetHealthAttribute())
+    {
+        OnHealthChanged.ExecuteIfBound();
+    }
+    else if (Attribute == GetManaAttribute())
+    {
+        OnManaChanged.ExecuteIfBound();
+    }
 }
 
 void UAlexAttributeSet::OnRep_DashCharges(const FGameplayAttributeData& OldValue) const

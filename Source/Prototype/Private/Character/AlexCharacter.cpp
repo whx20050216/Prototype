@@ -13,7 +13,6 @@
 #include "Character/AlexAnimInstance.h"
 #include "ActorComponent/WallDetectionComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
-#include "ActorComponent/AttributeComponent.h"
 #include "HUD/HealthWidget.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Kismet/GameplayStatics.h"
@@ -45,8 +44,6 @@ AAlexCharacter::AAlexCharacter()
 	LastMovementInput = FVector2D::ZeroVector;// 存储原始输入
 
 	WallDetection = CreateDefaultSubobject<UWallDetectionComponent>(TEXT("WallDetection"));
-
-	AttributeComponent = CreateDefaultSubobject<UAttributeComponent>(TEXT("AttributeComponent"));
 
 	LockPriority = 0.f;
 
@@ -179,9 +176,9 @@ void AAlexCharacter::BeginPlay()
 	    {
 	        HealthWidget->AddToViewport();
 	        
-	        if (AttributeComponent)
+	        if (AttributeSet)
 	        {
-	            HealthWidget->BindToAttributeComponent(AttributeComponent);
+	            HealthWidget->BindToAttributeSet(AttributeSet);
 	        }
 	    }
 	}
@@ -376,35 +373,28 @@ void AAlexCharacter::CLIMB()
 
 void AAlexCharacter::ATTACK()
 {
-
-	if (bIsAttacking) return;
-
-	const FMorphConfig& Config = GetCurrentMorphConfig();
-
-	// 检查配置有效性
-	if (Config.LightComboSections.Num() == 0 || !Config.ComboMontage)
-	{
-		return;
-	}
-
-	bIsAttacking = true;
-
-	// 获取当前连段段的 Section 名
-	FName SectionName = NAME_None;
-	if (Config.LightComboSections.IsValidIndex(CurrentComboStep))
-	{
-		SectionName = Config.LightComboSections[CurrentComboStep];
-	}
-	else
-	{
-		// 超出范围（保险处理）：回到第一段
-		CurrentComboStep = 0;
-		SectionName = Config.LightComboSections[CurrentComboStep];
-	}
-
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("ATTACK")));
-	PlayMontageSection(Config.ComboMontage, SectionName, 1.0f);
-	//PlayAnimationWithSections(AnimationConfig.Montage, AnimationConfig.SectionSequence, AnimationConfig.PlayRate);
+    if (!AbilitySystemComponent) return;
+    
+    // 检查是否已有激活的 Attack Ability（用于连击）
+    for (FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
+    {
+        if (Spec.Ability && Spec.Ability->AbilityTags.HasTag(FGameplayTag::RequestGameplayTag(FName("Ability.Attack"))))
+        {
+            if (Spec.IsActive())
+            {
+                // 已经激活，发送输入用于连击
+                AbilitySystemComponent->AbilitySpecInputPressed(Spec);
+                return;
+            }
+            // 找到了但未激活，不要return，跳出去激活它
+            break;
+        }
+    }
+    
+    // 没有激活的 Attack Ability，尝试激活
+    FGameplayTagContainer TagContainer;
+    TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Attack")));
+    AbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
 }
 
 void AAlexCharacter::TAB_Pressed()
@@ -439,11 +429,20 @@ void AAlexCharacter::PossessedBy(AController* NewController)
 	{
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	}
+
+	// Give Dash
 	if (DashAbilityClass)
     {
         FGameplayAbilitySpec Spec(DashAbilityClass, 1, -1, this);
         AbilitySystemComponent->GiveAbility(Spec);
     }
+
+	// Give Attack
+	if (AttackAbilityClass)
+	{
+		FGameplayAbilitySpec Spec(AttackAbilityClass, 1, -1, this);
+		AbilitySystemComponent->GiveAbility(Spec);
+	}
 }
 
 void AAlexCharacter::SwitchMorph(int32 NewMorphIndex)
@@ -451,10 +450,14 @@ void AAlexCharacter::SwitchMorph(int32 NewMorphIndex)
 	if (!MorphConfigs.IsValidIndex(NewMorphIndex)) return;
     if (NewMorphIndex == CurrentMorphIndex) return;
 
-	// 打断当前攻击
-    StopAllMontages();
-    bIsAttacking = false;
-    CurrentComboStep = 0;  // 新形态从第一段开始
+	// 如果正在攻击，先停止（GA 会自动处理结束）
+    if (AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(
+        FGameplayTag::RequestGameplayTag(FName("State.Attacking"))))
+    {
+        StopAllMontages();
+        // GA 检测到蒙太奇停止会自动 EndAbility，不需要手动设置 bIsAttacking
+    }
+    ResetAttackCombo();  // 新形态从第一段开始
 
 	// 记录旧索引（用于特效）
     int32 OldIndex = CurrentMorphIndex;
@@ -477,50 +480,6 @@ void AAlexCharacter::SwitchMorph(int32 NewMorphIndex)
     {
         UGameplayStatics::PlaySoundAtLocation(this, NewConfig.SwitchSound, GetActorLocation());
     }*/
-}
-
-void AAlexCharacter::OnAttackHit()
-{
-	if (!bIsAttacking) return;
-
-	const FMorphConfig& Config = GetCurrentMorphConfig();
-
-	// 使用当前形态的检测参数
-	FVector Start = GetActorLocation() + FVector(0, 0, 50);
-    FCollisionShape Sphere = FCollisionShape::MakeSphere(Config.MeleeRadius);
-
-	TArray<FHitResult> HitResults;
-	bool bHit = GetWorld()->SweepMultiByChannel(
-        HitResults, 
-        Start, Start, 
-        FQuat::Identity, 
-        ECC_Pawn, 
-        Sphere
-    );
-
-	if (bHit)
-	{
-		for (auto& Hit : HitResults)
-		{
-			if (AEnemy* Enemy = Cast<AEnemy>(Hit.GetActor()))
-			{
-				// 统一扇形检查（鞭子200°，拳90°，都在Config里配）
-				FVector ToEnemy = (Enemy->GetActorLocation() - GetActorLocation()).GetSafeNormal();
-				float AngleDeg = FMath::Acos(FVector::DotProduct(GetActorForwardVector(), ToEnemy)) * (180.f / PI);
-				if (AngleDeg <= Config.AttackAngle / 2.f)  // 统一判断
-				{
-					 UGameplayStatics::ApplyDamage(Enemy, Config.Damage, GetController(), this, UDamageType::StaticClass());
-					 // 单目标武器（拳/爪/刀/锤）：命中一个就停
-                    // 多目标武器（鞭子）：扫一片，继续检测其他敌人
-                    if (!Config.bIsMultiHit)
-                    {
-                        break;
-                    }
-				}
-			}
-		}
-	}
-	DrawDebugSphere(GetWorld(), Start, Config.MeleeRadius, 12, FColor::Red, false, 0.1f);
 }
 
 const FMorphConfig& AAlexCharacter::GetCurrentMorphConfig() const
@@ -1490,6 +1449,10 @@ void AAlexCharacter::PerformClimbMantle()
 void AAlexCharacter::OnClimbMantleEnded(UAnimMontage* Montage, bool bInterrupted)
 {
 	StopClimb();
+	if (AbilitySystemComponent)
+	{
+	    AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Climbing")));
+	}
 }
 
 void AAlexCharacter::StartGlide()
@@ -1743,38 +1706,36 @@ void AAlexCharacter::ExecuteChargeJump()
 	CurrentChargeTime = 0.f;
 }
 
-void AAlexCharacter::AttackEnd()
-{
-	const FMorphConfig& Config = GetCurrentMorphConfig();
-    int32 NextStep = CurrentComboStep + 1;
-    
-    if (Config.LightComboSections.IsValidIndex(NextStep))
-    {
-        // 有下一段：自动衔接
-        CurrentComboStep = NextStep;
-        bIsAttacking = false;
-        ATTACK();  // 播放下一段
-    }
-    else
-    {
-        // 连段结束，重置
-        CurrentComboStep = 0;
-        bIsAttacking = false;
-    }
-}
-
 float AAlexCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
 	float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 
-	if (AttributeComponent && ActualDamage > 0.f)
+	if (ActualDamage <= 0.f || !AbilitySystemComponent || !DamageEffectClass) return 0.f;
+
+	// 1. 创建 Effect Context（记录伤害来源，用于后续判定）
+	FGameplayEffectContextHandle Context = AbilitySystemComponent->MakeEffectContext();
+	Context.AddSourceObject(this);
+	Context.AddInstigator(EventInstigator, DamageCauser); // 记录凶手和武器
+
+	// 2. 创建 Spec（Level 这里传 1，我们用 SetByCaller 传具体值）
+	FGameplayEffectSpecHandle Spec = AbilitySystemComponent->MakeOutgoingSpec(DamageEffectClass, 1.0f, Context);
+	if (Spec.IsValid())
 	{
-		AttributeComponent->ApplyHealthChange(-ActualDamage);
-		if (AttributeComponent->GetHealth() <= 0.f)
+		// 3. 设置伤害值（负数，因为 GE 是 "Add" 到 Health）
+        // DataTag 必须和 GE 蓝图里配的一致
+		FGameplayTag DamageTag = FGameplayTag::RequestGameplayTag(FName("Data.Damage"));
+		Spec.Data->SetSetByCallerMagnitude(DamageTag, -ActualDamage);
+
+		// 4. 应用（Apply）
+		AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*Spec.Data);
+
+		// 5. 立即检查死亡（因为 Instant GE 已经执行完毕）
+		if (AttributeSet && AttributeSet->GetHealth() <= 0.f)
 		{
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Health is zero")));
+			OnCharacterDeath.Broadcast(this);
 		}
 	}
+
 	return ActualDamage;
 }
 
