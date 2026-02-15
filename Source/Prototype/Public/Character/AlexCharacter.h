@@ -7,6 +7,7 @@
 #include "AbilitySystemInterface.h"
 #include "Interfaces/PickupInterface.h"
 #include "Character/CharacterTypes.h"
+#include "GameplayTagContainer.h"
 #include "AlexCharacter.generated.h"
 
 class USpringArmComponent;
@@ -23,6 +24,10 @@ class UAbilitySystemComponent;
 class UAlexAttributeSet;
 class UGameplayAbility;
 class UGameplayEffect;
+class UInputConfig;
+struct FGameplayTag;
+class UAbilitySet;
+struct FGameplayAbilitySpecHandle;
 
 USTRUCT(BlueprintType)
 struct FMorphConfig
@@ -129,9 +134,6 @@ protected:
 	void TAB_Pressed();
 	void TAB_Released();
 
-	// 重写父类AttackEnd
-	//virtual void AttackEnd() override;
-
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
 	virtual void Landed(const FHitResult& Hit) override;	// 着陆触发事件
@@ -185,6 +187,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "GAS|Effects")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
+	UPROPERTY(EditDefaultsOnly, Category = "GAS|Input")
+	TObjectPtr<UInputConfig> InputConfig;
+
+	// 新的统一输入回调（替代原来的 DASH(), ATTACK() 等分散函数）
+	UFUNCTION()
+	void OnAbilityInputPressed(FGameplayTag InputTag);
+	
+	UFUNCTION()
+	void OnAbilityInputReleased(FGameplayTag InputTag);
+
 	// 死亡委托（给 UI 或 GameMode 监听）
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterDeath, AActor*, Victim);
 	UPROPERTY(BlueprintAssignable)
@@ -200,12 +212,8 @@ private:
 	/*
 	* 战斗相关
 	*/
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta = (AllowPrivateAccess = "true"))
-	TArray<FMorphConfig> MorphConfigs;
-
-	// 当前形态索引
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Combat", meta = (AllowPrivateAccess = "true"))
-	int32 CurrentMorphIndex = 0;
+	UPROPERTY(EditDefaultsOnly, Category="Combat", meta=(AllowPrivateAccess="true"))
+	TMap<FGameplayTag, FMorphConfig> FormMorphConfigs;
 
 	// 当前连段进度（相对于当前形态）
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Combat", meta = (AllowPrivateAccess = "true"))
@@ -213,8 +221,20 @@ private:
 
 	// 形态切换（供输入调用）
 	UFUNCTION(BlueprintCallable, Category="Combat")
-	void SwitchMorph(int32 NewMorphIndex);
+	void SwitchToForm(FGameplayTag NewFormTag);
 
+	// 各形态对应的技能组配置
+	UPROPERTY(EditDefaultsOnly, Category="GAS|Forms")
+	TMap<FGameplayTag, TObjectPtr<UAbilitySet>> FormAbilitySets;
+
+	// 当前激活的技能Handles（用于切换时移除）
+	UPROPERTY()
+	TArray<FGameplayAbilitySpecHandle> CurrentFormAbilityHandles;
+
+	// 当前形态Tag（替代之前的int32 CurrentMorphIndex作为唯一标识）
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Combat", meta=(AllowPrivateAccess="true"))
+	FGameplayTag CurrentFormTag;
+	
 	/*
 	* 动态脚步声（用tag标签实现地面材质识别）
 	*/

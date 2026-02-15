@@ -19,6 +19,8 @@
 #include "Enemy/Enemy.h"
 #include "AbilitySystemComponent.h"
 #include "GAS/AlexAttributeSet.h"
+#include "GAS/Input/InputConfig.h"
+#include "GAS/AbilitySet.h"
 
 AAlexCharacter::AAlexCharacter()
 {
@@ -143,12 +145,38 @@ void AAlexCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AAlexCharacter::JumpReleased);
 		EnhancedInputComponent->BindAction(WalkAction, ETriggerEvent::Started, this, &AAlexCharacter::WALK);
 		EnhancedInputComponent->BindAction(RunAction, ETriggerEvent::Triggered, this, &AAlexCharacter::RUN);
-		EnhancedInputComponent->BindAction(DashAction, ETriggerEvent::Started, this, &AAlexCharacter::DASH);
+		//EnhancedInputComponent->BindAction(DashAction, ETriggerEvent::Started, this, &AAlexCharacter::DASH);
 		EnhancedInputComponent->BindAction(ClimbAction, ETriggerEvent::Started, this, &AAlexCharacter::CLIMB);
-		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AAlexCharacter::ATTACK);
+		//EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AAlexCharacter::ATTACK);
 		EnhancedInputComponent->BindAction(LockOnAction, ETriggerEvent::Started, this, &AAlexCharacter::TAB_Pressed);
 		EnhancedInputComponent->BindAction(LockOnAction, ETriggerEvent::Completed, this, &AAlexCharacter::TAB_Released);
 	
+		// === GAS Ability 输入改为通过 InputConfig 绑定 ===
+		if (InputConfig)
+		{
+			for (const FAbilityInputBinding& Binding : InputConfig->AbilityInputBindings)
+			{
+				if (Binding.InputAction && Binding.InputTag.IsValid())
+				{
+					// Pressed
+					EnhancedInputComponent->BindAction(
+						Binding.InputAction,
+						ETriggerEvent::Started,
+						this,
+						&AAlexCharacter::OnAbilityInputPressed,
+						Binding.InputTag
+					);
+					// Released（用于需要持续按住的技能，如蓄力）
+					EnhancedInputComponent->BindAction(
+						Binding.InputAction,
+						ETriggerEvent::Completed,
+						this,
+						&AAlexCharacter::OnAbilityInputReleased,
+						Binding.InputTag
+					);
+				}
+			}
+		}
 	}
 }
 
@@ -421,6 +449,41 @@ void AAlexCharacter::TAB_Released()
 	}
 }
 
+void AAlexCharacter::OnAbilityInputPressed(FGameplayTag InputTag)
+{
+	if (!AbilitySystemComponent || !InputTag.IsValid()) return;
+
+	// 1. 先检查是否已有对应Tag的Ability正在运行（连击关键！）
+	for (FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
+	{
+		// 检查DynamicAbilityTags（我们在GiveAbility时绑定的InputTag）
+		if (Spec.DynamicAbilityTags.HasTag(InputTag) && Spec.IsActive())
+		{
+			// 通知已激活的Ability：输入又按下了（GA_AlexAttack会用它触发下一段）
+			AbilitySystemComponent->AbilitySpecInputPressed(Spec);
+			return;
+		}
+	}
+
+	// 2. 尝试激活对应 Tag 的 Ability
+	FGameplayTagContainer TagContainer(InputTag);
+	AbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
+}
+
+void AAlexCharacter::OnAbilityInputReleased(FGameplayTag InputTag)
+{	// 暂时没有蓄力技能，有则开放
+	//if (!AbilitySystemComponent || !InputTag.IsValid()) return;
+
+	// 遍历所有可激活的 Ability，找到匹配 InputTag 且正在运行的，通知它输入释放了
+    /*for (FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
+	{
+        if (Spec.DynamicAbilityTags.HasTag(InputTag) && Spec.IsActive())
+		{
+            AbilitySystemComponent->AbilitySpecInputReleased(Spec);
+        }
+    }*/
+}
+
 void AAlexCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
@@ -430,64 +493,51 @@ void AAlexCharacter::PossessedBy(AController* NewController)
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	}
 
-	// Give Dash
-	if (DashAbilityClass)
-    {
-        FGameplayAbilitySpec Spec(DashAbilityClass, 1, -1, this);
-        AbilitySystemComponent->GiveAbility(Spec);
-    }
-
-	// Give Attack
-	if (AttackAbilityClass)
-	{
-		FGameplayAbilitySpec Spec(AttackAbilityClass, 1, -1, this);
-		AbilitySystemComponent->GiveAbility(Spec);
-	}
+	// 授予默认形态的技能组（替代硬编码Give Dash/Attack）
+	FGameplayTag DefaultTag = FGameplayTag::RequestGameplayTag(FName("Form.Default"));
+	SwitchToForm(DefaultTag);
 }
 
-void AAlexCharacter::SwitchMorph(int32 NewMorphIndex)
+void AAlexCharacter::SwitchToForm(FGameplayTag NewFormTag)
 {
-	if (!MorphConfigs.IsValidIndex(NewMorphIndex)) return;
-    if (NewMorphIndex == CurrentMorphIndex) return;
+	if (!AbilitySystemComponent || !FormAbilitySets.Contains(NewFormTag)) return;
+	if (NewFormTag == CurrentFormTag) return;
 
-	// 如果正在攻击，先停止（GA 会自动处理结束）
-    if (AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(
-        FGameplayTag::RequestGameplayTag(FName("State.Attacking"))))
-    {
-        StopAllMontages();
-        // GA 检测到蒙太奇停止会自动 EndAbility，不需要手动设置 bIsAttacking
-    }
-    ResetAttackCombo();  // 新形态从第一段开始
+	// 1. 如果正在攻击，先停止
+	if (AbilitySystemComponent->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Attacking"))))
+	{
+		StopAllMontages();
+	}
+	ResetAttackCombo();
 
-	// 记录旧索引（用于特效）
-    int32 OldIndex = CurrentMorphIndex;
-    CurrentMorphIndex = NewMorphIndex;
+	// 2. 移除当前形态的所有技能
+	if (UAbilitySet* CurrentSet = FormAbilitySets.FindRef(CurrentFormTag))
+	{
+		CurrentSet->RemoveFromAbilitySystem(AbilitySystemComponent, CurrentFormAbilityHandles);
+	}
+	CurrentFormAbilityHandles.Empty();
 
-	const FMorphConfig& NewConfig = GetCurrentMorphConfig();
+	// 3. 授予新形态的技能组
+	if (UAbilitySet* NewSet = FormAbilitySets.FindRef(NewFormTag))
+	{
+		NewSet->GiveToAbilitySystem(AbilitySystemComponent, CurrentFormAbilityHandles);
+	}
 
-	// 播放切换特效（如果有）
-    /*if (NewConfig.SwitchEffect)
-    {
-        UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-            this, 
-            NewConfig.SwitchEffect, 
-            GetActorLocation(), 
-            GetActorRotation()
-        );
-    }*/
-
-    /*if (NewConfig.SwitchSound)
-    {
-        UGameplayStatics::PlaySoundAtLocation(this, NewConfig.SwitchSound, GetActorLocation());
-    }*/
+	// 4. 更新形态Tag（用于GA_AlexAttack查询当前攻击蒙太奇）
+	if (CurrentFormTag.IsValid())
+	{
+		AbilitySystemComponent->SetLooseGameplayTagCount(CurrentFormTag, 0);
+	}
+	AbilitySystemComponent->SetLooseGameplayTagCount(NewFormTag, 1);
+	CurrentFormTag = NewFormTag;
 }
 
 const FMorphConfig& AAlexCharacter::GetCurrentMorphConfig() const
 {
-	if (MorphConfigs.IsValidIndex(CurrentMorphIndex))
-	{
-		return MorphConfigs[CurrentMorphIndex];
-	}
+	if (const FMorphConfig* Config = FormMorphConfigs.Find(CurrentFormTag))
+    {
+        return *Config;
+    }
 
 	// 保险：返回空配置避免崩溃
 	static FMorphConfig EmptyConfig;
