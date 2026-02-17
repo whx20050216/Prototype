@@ -28,6 +28,8 @@ class UInputConfig;
 struct FGameplayTag;
 class UAbilitySet;
 struct FGameplayAbilitySpecHandle;
+class AWeaponActor;
+class UFormWheelWidget;
 
 USTRUCT(BlueprintType)
 struct FMorphConfig
@@ -37,6 +39,10 @@ struct FMorphConfig
 	// 形态类型标识
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Morph")
 	EMorphType Type = EMorphType::EMT_Fist;
+
+	// 武器
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	TSubclassOf<AWeaponActor> WeaponClass; // 该形态使用的武器（拳形态可留空）
 
 	// 检测参数（每种形态不同）
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
@@ -167,12 +173,21 @@ protected:
 	UPROPERTY(EditAnywhere, Category="AnimMontage")
 	UAnimMontage* WallRunBackFlipMontage;	// 墙跑急停后空翻动作
 
+	// HealthWidgetClass
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
     TSubclassOf<UHealthWidget> HealthWidgetClass;
 
-	// Widget实例
+	// HealthWidget实例
     UPROPERTY()
-    UHealthWidget* HealthWidget;
+    TObjectPtr<UHealthWidget> HealthWidget;
+
+	// FormWheelWidgetClass
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
+	TSubclassOf<UFormWheelWidget> FormWheelWidgetClass;
+
+	// FormWheelWidget实例
+	UPROPERTY()
+	TObjectPtr<UFormWheelWidget> FormWheelWidget;
 
 	// GAS
 	UPROPERTY(VisibleAnywhere, Category = "GAS")
@@ -210,10 +225,30 @@ private:
 	bool bHasMovementInput = false;			// 是否有移动输入
 
 	/*
+	* 形态轮盘相关
+	*/
+	// 已解锁的形态（存档用）
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Morph", SaveGame, meta = (AllowPrivateAccess = "true"))
+	TSet<FGameplayTag> UnlockedFormTags;
+	
+	void ShowMorphWheel();
+	void HideMorphWheelAndConfirm();
+	void UpdateMorphWheelSelection();  // Tick中调用或绑定鼠标移动
+	void UnlockForm(FGameplayTag FormTag);  // 剧情事件调用
+
+	/*
 	* 战斗相关
 	*/
 	UPROPERTY(EditDefaultsOnly, Category="Combat", meta=(AllowPrivateAccess="true"))
 	TMap<FGameplayTag, FMorphConfig> FormMorphConfigs;
+
+	// 当前持有的武器实例
+	UPROPERTY()
+	TObjectPtr<AWeaponActor> CurrentWeapon;
+
+	// 武器切换函数
+	void AttachWeaponForForm(FGameplayTag FormTag);
+	void DetachCurrentWeapon();
 
 	// 当前连段进度（相对于当前形态）
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Combat", meta = (AllowPrivateAccess = "true"))
@@ -353,6 +388,7 @@ private:
 	UPROPERTY(EditAnywhere, Category="WallRun")
 	float WallRunJumpCooldownDuration = 0.7f;  // 冷却时间（秒），推荐0.3-0.5
 
+	bool bIsRoofFlipping = false;
 
 	//预判楼顶
 	bool CheckApproachingRoof();
@@ -527,6 +563,9 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
 	UInputAction* LockOnAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInputAction> MorphWheelAction;
 
 	UPROPERTY(VisibleAnywhere)
 	AItem* OverlappingItem;

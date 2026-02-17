@@ -14,6 +14,7 @@
 #include "ActorComponent/WallDetectionComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "HUD/HealthWidget.h"
+#include "HUD/FormWheelWidget.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Kismet/GameplayStatics.h"
 #include "Enemy/Enemy.h"
@@ -21,6 +22,7 @@
 #include "GAS/AlexAttributeSet.h"
 #include "GAS/Input/InputConfig.h"
 #include "GAS/AbilitySet.h"
+#include "Items/WeaponActor.h"
 
 AAlexCharacter::AAlexCharacter()
 {
@@ -109,6 +111,12 @@ void AAlexCharacter::Tick(float DeltaTime)
 
 	//更新锁定UI
 	UpdateLockOnUI();
+
+	//轮盘高亮
+	if (FormWheelWidget && FormWheelWidget->IsInViewport())
+    {
+        UpdateMorphWheelSelection();
+    }
 }
 
 void AAlexCharacter::ResetRun()
@@ -145,12 +153,12 @@ void AAlexCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AAlexCharacter::JumpReleased);
 		EnhancedInputComponent->BindAction(WalkAction, ETriggerEvent::Started, this, &AAlexCharacter::WALK);
 		EnhancedInputComponent->BindAction(RunAction, ETriggerEvent::Triggered, this, &AAlexCharacter::RUN);
-		//EnhancedInputComponent->BindAction(DashAction, ETriggerEvent::Started, this, &AAlexCharacter::DASH);
 		EnhancedInputComponent->BindAction(ClimbAction, ETriggerEvent::Started, this, &AAlexCharacter::CLIMB);
-		//EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AAlexCharacter::ATTACK);
 		EnhancedInputComponent->BindAction(LockOnAction, ETriggerEvent::Started, this, &AAlexCharacter::TAB_Pressed);
 		EnhancedInputComponent->BindAction(LockOnAction, ETriggerEvent::Completed, this, &AAlexCharacter::TAB_Released);
-	
+		EnhancedInputComponent->BindAction(MorphWheelAction, ETriggerEvent::Started, this, &AAlexCharacter::ShowMorphWheel);
+		EnhancedInputComponent->BindAction(MorphWheelAction, ETriggerEvent::Completed, this, &AAlexCharacter::HideMorphWheelAndConfirm);
+
 		// === GAS Ability 输入改为通过 InputConfig 绑定 ===
 		if (InputConfig)
 		{
@@ -230,6 +238,12 @@ void AAlexCharacter::BeginPlay()
 			LockedWidget->SetVisibility(ESlateVisibility::Hidden);  // 初始隐藏
 		}
 	}
+
+	UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Claw")));
+    UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Whip")));
+    UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Hammer")));
+    UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Blade")));
+    UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Default")));
 }
 
 bool AAlexCharacter::HasMovementInput()
@@ -289,6 +303,8 @@ void AAlexCharacter::LOOK(const FInputActionValue& Value)
 
 void AAlexCharacter::JumpPressed()
 {
+	if (bIsRoofFlipping) return;
+
 	// 如果正在滑翔，再次按下空格停止滑翔
     if (ActionState == EActionState::EAS_Gliding)
     {
@@ -301,6 +317,8 @@ void AAlexCharacter::JumpPressed()
 
 void AAlexCharacter::JumpReleased()
 {
+	if (bIsRoofFlipping) return;
+
 	// 滑翔状态下不处理跳跃释放
     if (ActionState == EActionState::EAS_Gliding) return;
 
@@ -373,6 +391,13 @@ void AAlexCharacter::DASH()
 {
 	if (!AbilitySystemComponent) return;
 
+	if (AttributeSet)
+    {
+        UE_LOG(LogTemp, Warning, TEXT(">>> DASH ATTEMPT | State: %s | Charges: %.0f"), 
+            *UEnum::GetValueAsString(ActionState),
+            AttributeSet->GetDashCharges());  // 如果还没加这个变量，先删掉这个参数
+    }
+
 	bool bWasGliding = (ActionState == EActionState::EAS_Gliding);
 
 	FGameplayTagContainer TagContainer;
@@ -380,6 +405,8 @@ void AAlexCharacter::DASH()
     
     // 复数形式 Abilities，参数是 Container
     bool bSuccess = AbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
+
+	UE_LOG(LogTemp, Warning, TEXT(">>> DASH RESULT: %s"), bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
 
 	if (bSuccess && bWasGliding)
 	{
@@ -498,8 +525,159 @@ void AAlexCharacter::PossessedBy(AController* NewController)
 	SwitchToForm(DefaultTag);
 }
 
+void AAlexCharacter::ShowMorphWheel()
+{
+	if (!FormWheelWidgetClass) return;
+
+	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, TEXT("ShowMorphWheel"));
+
+	// 创建并显示轮盘
+	FormWheelWidget = CreateWidget<UFormWheelWidget>(GetWorld(), FormWheelWidgetClass);
+	if (FormWheelWidget)
+	{
+		// 传入已解锁的形态
+		TArray<FGameplayTag> AvailableTags;
+		for (const FGameplayTag& Tag : UnlockedFormTags)
+		{
+			AvailableTags.Add(Tag);
+		}
+		FormWheelWidget->SetupWheel(AvailableTags);
+		FormWheelWidget->AddToViewport();
+
+		// 立即更新一次鼠标位置（显示高亮）
+		if(APlayerController* PC=Cast<APlayerController>(GetController()))
+		{
+			FVector2D MousePos, ViewportSize;
+			PC->GetMousePosition(MousePos.X, MousePos.Y);
+			GEngine->GameViewport->GetViewportSize(ViewportSize);
+			FormWheelWidget->UpdateMousePosition(MousePos, ViewportSize * 0.5f);
+
+			// ========== 切换输入模式 ==========
+			FInputModeGameAndUI InputMode;
+			InputMode.SetWidgetToFocus(FormWheelWidget->TakeWidget());  // 焦点给UI
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			PC->SetInputMode(InputMode);
+		}
+
+		// 子弹时间（大时缓）
+		UGameplayStatics::SetGlobalTimeDilation(this, 0.1f);
+
+		// 显示鼠标光标
+		if (APlayerController* PC = Cast<APlayerController>(GetController()))
+		{
+			PC->bShowMouseCursor = true;
+		}
+
+	}
+}
+
+void AAlexCharacter::HideMorphWheelAndConfirm()
+{
+	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, TEXT("HideMorphWheelAndConfirm"));
+
+	// 恢复正常时间
+	UGameplayStatics::SetGlobalTimeDilation(this, 1.0f);
+
+	// 隐藏鼠标光标
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->bShowMouseCursor = false;
+		// ========== 切回游戏模式 ==========
+		FInputModeGameOnly InputMode;
+		PC->SetInputMode(InputMode);
+	}
+
+	if (FormWheelWidget)
+	{
+		// 获取选择的形态
+		FGameplayTag SelectedTag = FormWheelWidget->GetSelectedFormTag();
+		
+		// 移除UI
+		FormWheelWidget->RemoveFromParent();
+		FormWheelWidget = nullptr;
+		
+		// 执行切换（如果不是当前形态）
+		if (SelectedTag.IsValid() && SelectedTag != CurrentFormTag)
+		{
+			SwitchToForm(SelectedTag);  // 你之前写的带特效的切换
+		}
+	}
+}
+
+
+void AAlexCharacter::UpdateMorphWheelSelection()
+{
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+    {
+        FVector2D MousePos, ViewportSize;
+        PC->GetMousePosition(MousePos.X, MousePos.Y);
+        GEngine->GameViewport->GetViewportSize(ViewportSize);
+        FormWheelWidget->UpdateMousePosition(MousePos, ViewportSize * 0.5f);
+
+		UE_LOG(LogTemp, Warning, TEXT("Angle Updated, CurrentForm: %s"), 
+            *FormWheelWidget->GetSelectedFormTag().ToString());
+    }
+}
+
+void AAlexCharacter::UnlockForm(FGameplayTag FormTag)
+{
+	UnlockedFormTags.Add(FormTag);
+}
+
+void AAlexCharacter::AttachWeaponForForm(FGameplayTag FormTag)
+{
+	// 加这行！
+	UE_LOG(LogTemp, Error, TEXT(">>> AttachWeaponForForm ENTRY! FormTag: %s"), *FormTag.ToString());
+	// 1. 先卸下旧武器
+	DetachCurrentWeapon();
+
+	// 2. 获取新形态配置
+	const FMorphConfig& Config = GetCurrentMorphConfig();
+	UE_LOG(LogTemp, Error, TEXT(">>> Config ptr: %p"), &Config);
+
+	// 3. 如果该形态没有配置武器（如拳形态），直接返回（空手）
+	if (!Config.WeaponClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No WeaponClass configured for %s"), *FormTag.ToString());
+		return;
+	}
+
+	// 4. 生成新武器
+	FActorSpawnParameters Params;
+	Params.Owner = this;
+	CurrentWeapon = GetWorld()->SpawnActor<AWeaponActor>(Config.WeaponClass, Params);
+
+	if (CurrentWeapon)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Weapon Spawned: %s"), *CurrentWeapon->GetName());
+		// 5. 附加到右手骨骼插槽（默认骨骼名是 "hand_r"，如果你的不同请改）
+		FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, true);
+		CurrentWeapon->AttachToComponent(GetMesh(), AttachRules, FName("hand_r"));
+
+		// 关键：打印附加后的位置
+		UE_LOG(LogTemp, Warning, TEXT("Attached to %s, Location: %s"), 
+			*GetMesh()->GetName(), 
+			*CurrentWeapon->GetActorLocation().ToString());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to spawn weapon!"));
+	}
+}
+
+void AAlexCharacter::DetachCurrentWeapon()
+{
+	if (CurrentWeapon)
+	{
+		CurrentWeapon->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		CurrentWeapon->Destroy();
+		CurrentWeapon = nullptr;
+	}
+}
+
 void AAlexCharacter::SwitchToForm(FGameplayTag NewFormTag)
 {
+	UE_LOG(LogTemp, Error, TEXT(">>> SwitchToForm Called! Target: %s"), *NewFormTag.ToString());
 	if (!AbilitySystemComponent || !FormAbilitySets.Contains(NewFormTag)) return;
 	if (NewFormTag == CurrentFormTag) return;
 
@@ -530,6 +708,8 @@ void AAlexCharacter::SwitchToForm(FGameplayTag NewFormTag)
 	}
 	AbilitySystemComponent->SetLooseGameplayTagCount(NewFormTag, 1);
 	CurrentFormTag = NewFormTag;
+
+	AttachWeaponForForm(NewFormTag);
 }
 
 const FMorphConfig& AAlexCharacter::GetCurrentMorphConfig() const
@@ -999,6 +1179,8 @@ FVector AAlexCharacter::CalculateVaultVelocity()
 
 bool AAlexCharacter::CheckApproachingRoof()
 {
+	if (bIsRoofFlipping) return false;
+
 	if (!WallDetection) return false;
 
 	WallDetection->UpperTrace();
@@ -1023,8 +1205,9 @@ bool AAlexCharacter::CheckApproachingRoof()
 
 void AAlexCharacter::PerformRoofFlip()
 {
-	if (!RoofFlipMontage) return;
+	if (!RoofFlipMontage || bIsRoofFlipping) return;
 
+	bIsRoofFlipping = true;
 	bIsWallRunning = false;
 	ActionState = EActionState::EAS_Unoccupied;
 
@@ -1064,6 +1247,16 @@ void AAlexCharacter::OnRoofFlipEnded(UAnimMontage* Montage, bool bInterrupted)
         AbilitySystemComponent->RemoveLooseGameplayTag(
             FGameplayTag::RequestGameplayTag(FName("State.WallRunning")));
     }
+
+	UE_LOG(LogTemp, Warning, TEXT(">>> ROOFFLIP ENDED | bInterrupted: %d | State: %s"), 
+        bInterrupted,
+        *UEnum::GetValueAsString(ActionState));
+	if (AttributeSet) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT(">>> Resetting Dash from RoofFlipEnd"));
+        AttributeSet->SetDashCharges(AttributeSet->GetMaxDashCharges());
+    }
+	bIsRoofFlipping = false;
 }
 
 void AAlexCharacter::PerformWallRunBackFlip()
@@ -1124,6 +1317,8 @@ void AAlexCharacter::OnWallRunBackFlipEnded(UAnimMontage* Montage, bool bInterru
 
 void AAlexCharacter::StartWallRun()
 {
+	if (bIsRoofFlipping) return;
+
 	bool bIsAutoFromGlide = (ActionState == EActionState::EAS_Gliding);
 
 	if (LastMovementInput.Y < -0.5f) return;
@@ -1509,6 +1704,7 @@ void AAlexCharacter::StartGlide()
 {
 	if (bIsClimbing) return;
 	if (!CanGlide()) return;
+	if (bIsRoofFlipping) return;
 
 	ActionState = EActionState::EAS_Gliding;
 	bLockMove = false;
@@ -1792,6 +1988,9 @@ float AAlexCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageE
 void AAlexCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
+
+	UE_LOG(LogTemp, Warning, TEXT(">>> LANDED TRIGGERED | State: %s"), 
+        *UEnum::GetValueAsString(ActionState));
 
 	if (AttributeSet) AttributeSet->SetDashCharges(AttributeSet->GetMaxDashCharges());
 
