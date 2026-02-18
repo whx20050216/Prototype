@@ -221,6 +221,15 @@ protected:
     virtual void PossessedBy(AController* NewController) override;
 
 private:
+	/*
+	* 存档
+	*/
+	UFUNCTION(BlueprintCallable, Category = "SaveGame")
+	void SaveGame();
+
+	UFUNCTION(BlueprintCallable, Category = "SaveGame")
+	void LoadGame();
+
 	UPROPERTY(BlueprintReadOnly, Category="Input", meta = (AllowPrivateAccess = "true"))
 	bool bHasMovementInput = false;			// 是否有移动输入
 

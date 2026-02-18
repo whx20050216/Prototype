@@ -149,6 +149,14 @@ bool AEnemyAIController::GetIsAttacking() const
     return false;
 }
 
+void AEnemyAIController::SetAIState(EAIState NewState)
+{
+	if (BlackboardComp)
+    {
+        BlackboardComp->SetValueAsEnum("AIState", (uint8)NewState);
+    }
+}
+
 bool AEnemyAIController::HasTargetPlayer() const
 {
     if (!BlackboardComp) return false;

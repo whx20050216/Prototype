@@ -22,6 +22,16 @@ enum class EAttackType : uint8
 	Raycast		UMETA(DisplayName = "Ray attack")
 };
 
+// 行为类型枚举
+UENUM(BlueprintType)
+enum class EAIState : uint8
+{
+	Idle,		// 待机（绿）
+	Suspicious,	// 警觉（黄条累积中）
+	Alert,		// 通缉/战斗（红）
+	Dead
+};
+
 USTRUCT(BlueprintType)
 struct FAttackConfig
 {
@@ -118,12 +128,48 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void SetAttackType(EAttackType Type);
 
+	UFUNCTION(BlueprintCallable, Category="AI")
+	float GetAcceptanceRadius() const;
+
+	UFUNCTION(BlueprintCallable, Category="AI")
+	float GetAttackRange() const;
+
 	// 获取当前动画Pitch值
 	UFUNCTION(BlueprintCallable, Category="Combat")
     float GetCurrentAimPitch() const;
 
+	// 警觉系统配置
+	UPROPERTY(EditAnywhere, Category = "AI|Suspicion")
+	float SuspicionIncreaseRate = 30.f;		// 每秒增加30点（约3.3秒充满）
+
+	UPROPERTY(EditAnywhere, Category="AI|Suspicion")
+	float SuspicionDecayRate = 20.f;		// 每秒减少20点（5秒清空）
+
+	UPROPERTY(EditAnywhere, Category="AI|Suspicion")
+	float SuspicionThreshold = 100.f;		// 满条进入Alert
+	
+	// 当前状态（同步到Blackboard）
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI")
+	EAIState CurrentAIState = EAIState::Idle;
+
 protected:
 	virtual void BeginPlay() override;
+
+	// 警觉系统配置
+	float CurrentSuspicion = 0.f;
+	bool bCanSeePlayer = false;		// 当前帧是否看到玩家
+	// 是否跳过警觉条，直接发现即攻击（如感染体/近战敌人）
+	UPROPERTY(EditAnywhere, Category="AI|Suspicion")
+	bool bSkipSuspicion = false;
+
+	// 警觉更新
+	void UpdateSuspicion(float DeltaTime);
+
+	// 进入Alert状态（广播、设置Target等）
+    void EnterAlertState();
+
+	// 附近敌人广播响应
+    void ForceEnterAlert();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Attributes")
 	UAttributeComponent* AttributeComp;

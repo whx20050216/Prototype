@@ -13,13 +13,14 @@
 #include "ActorComponent/AttributeComponent.h"
 #include "HUD/HealthWidget.h"
 #include "Components/WidgetComponent.h"
+#include "Engine/OverlapResult.h"
 
 AEnemy::AEnemy()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
 	PawnSensing = CreateDefaultSubobject<UPawnSensingComponent>(TEXT("PawnSensing"));
-	PawnSensing->SightRadius = 2000.f;		//2000.f为视野半径
+	PawnSensing->SightRadius = 3000.f;		//3000.f为视野半径
 	PawnSensing->SetPeripheralVisionAngle(60.f);	// 100度总视野
 
 	// 指定AIController类
@@ -41,6 +42,16 @@ AEnemy::AEnemy()
 void AEnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	if (BlackboardComp)
+    {
+        BlackboardComp->SetValueAsFloat("DistanceToPlayer", GetDistanceToPlayer());
+    }
+
+	if (CurrentAIState != EAIState::Dead)
+	{
+		UpdateSuspicion(DeltaTime);
+	}
 
 	// 只在远程攻击状态下更新Pitch（优化）
     if (bIsAttacking && AttackConfigs[CurrentAttackIndex].Type != EAttackType::Melee)
@@ -147,6 +158,131 @@ void AEnemy::BeginPlay()
 	HideHealthBar();
 }
 
+void AEnemy::UpdateSuspicion(float DeltaTime)
+{
+	AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController());
+	if (!AIController) return;
+
+	// 如果是"狂暴/感染体"类型，看到玩家直接 Alert，不累积黄条
+    if (bSkipSuspicion && bCanSeePlayer && CurrentAIState != EAIState::Alert)
+    {
+        EnterAlertState();  // 直接满条进入战斗
+        return;  // 跳过后面的累积逻辑
+    }
+
+	if (bCanSeePlayer && CurrentAIState != EAIState::Alert)
+	{
+		// 看到玩家，累积警觉条
+		CurrentSuspicion += DeltaTime * SuspicionIncreaseRate;
+
+		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("CurrentSuspicion: %f"), CurrentSuspicion));
+
+		// 进入Suspicious状态
+		if (CurrentAIState == EAIState::Idle)
+		{
+			CurrentAIState = EAIState::Suspicious;
+
+			// 同步到Blackboard（BT用这个判断行为）
+			AIController->SetAIState(EAIState::Suspicious);
+			// 面向玩家但不移动
+            if (AActor* Player = GetPlayerActor())
+            {
+                AIController->SetTargetPlayer(Player); // 设置目标用于面向，但BT不追击
+            }
+		}
+
+		// 警觉条满，进入Alert
+		if (CurrentSuspicion >= SuspicionThreshold)
+		{
+			EnterAlertState();
+		}
+	}
+	else if (!bCanSeePlayer && CurrentAIState == EAIState::Suspicious)
+	{
+		// 丢失视野，衰减
+		CurrentSuspicion -= DeltaTime * SuspicionDecayRate;
+		if (CurrentSuspicion <= 0.f)
+		{
+			CurrentSuspicion = 0.f;
+			CurrentAIState = EAIState::Idle;
+			AIController->SetAIState(EAIState::Idle);
+			AIController->ClearTargetPlayer();
+		}
+	}
+
+	// 同步 Suspicion 值到 Blackboard（用于UI显示）
+    if (BlackboardComp)
+    {
+        BlackboardComp->SetValueAsFloat("SuspicionLevel", CurrentSuspicion);
+    }
+}
+
+void AEnemy::EnterAlertState()
+{
+	CurrentAIState = EAIState::Alert;
+	CurrentSuspicion = SuspicionThreshold;	// 保持满值
+
+	AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController());
+    if (!AIController) return;
+
+	// 1. 同步到Blackboard（BT切换到Attack分支）
+	AIController->SetAIState(EAIState::Alert);
+	// 2. 设置TargetPlayer（允许BT追击）
+	if (AActor* Player = GetPlayerActor())
+    {
+        AIController->SetTargetPlayer(Player);
+    }
+
+	// 3. 广播给附近敌人（让他们进入Suspicious）
+	FVector Location = GetActorLocation();
+    float AlertRadius = 2000.f; // 20米
+	TArray<FOverlapResult> Overlaps;
+    FCollisionShape Sphere = FCollisionShape::MakeSphere(AlertRadius);
+	if (GetWorld()->OverlapMultiByChannel(Overlaps, Location, FQuat::Identity, ECC_Pawn, Sphere))
+	{
+		for (const FOverlapResult& Overlap : Overlaps)
+		{
+			AEnemy* NearbyEnemy = Cast<AEnemy>(Overlap.GetActor());
+			// 排除自己、排除已 Alert、排除 Dead
+            if (NearbyEnemy && 
+                NearbyEnemy != this && 
+                NearbyEnemy->CurrentAIState != EAIState::Alert && 
+                NearbyEnemy->CurrentAIState != EAIState::Dead)
+            {
+                // 新增：只有同类型才互相唤醒（感染体唤醒感染体，军队唤醒军队）
+				if (NearbyEnemy->bSkipSuspicion == this->bSkipSuspicion)
+				{
+				    NearbyEnemy->ForceEnterAlert();
+				}
+            }
+		}
+	}
+	GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, 
+        FString::Printf(TEXT("%s Enter Alert State And Broadcast！"), *GetName()));
+}
+
+void AEnemy::ForceEnterAlert()
+{
+	// 如果已经在 Alert 或 Dead，不处理
+    if (CurrentAIState == EAIState::Alert || CurrentAIState == EAIState::Dead)
+        return;
+
+	CurrentAIState = EAIState::Alert;
+	CurrentSuspicion = SuspicionThreshold;  // 满条
+
+	AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController());
+    if (!AIController) return;
+
+	// 同步 Blackboard
+	AIController->SetAIState(EAIState::Alert);
+
+    // 设置 TargetPlayer（面向并准备追击）
+    if (AActor* Player = GetPlayerActor())
+    {
+        AIController->SetTargetPlayer(Player);
+    }
+}
+
 float AEnemy::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
 	float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
@@ -198,6 +334,13 @@ void AEnemy::HandleHealthChanged(float CurrentHealth, float MaxHealth, float Del
 
 void AEnemy::OnHealthDepleted()
 {
+	// 标记死亡状态
+    CurrentAIState = EAIState::Dead;
+	if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+	{
+		AIController->SetAIState(EAIState::Dead);
+	}
+
 	GetWorldTimerManager().ClearTimer(HideHealthBarTimer);
 	HideHealthBar();
 	Destroy();
@@ -208,17 +351,24 @@ void AEnemy::OnSeePlayer(APawn* Pawn)
 	if (AAlexCharacter* Player = Cast<AAlexCharacter>(Pawn))
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Find Player")));
+		// 只是标记看到玩家，具体行为由 UpdateSuspicion 驱动
+		bCanSeePlayer = true;
 
-		if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+		// 如果已经在Alert状态，确保TargetPlayer已设置（防止丢失后重新看到）
+		if (CurrentAIState == EAIState::Alert)
 		{
-			// 调用Controller的Set函数
-			if (!AIController->HasTargetPlayer())
+			if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
 			{
-				AIController->SetTargetPlayer(Player);
-				GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Set TargetPlayer")));
+				if (!AIController->HasTargetPlayer())
+				{
+					AIController->SetTargetPlayer(Player);
+				}
 			}
-			
-			// 启动持续检测计时器
+		}
+
+		// 启动持续检测（原有逻辑，用于检测丢失）
+		if (!GetWorld()->GetTimerManager().IsTimerActive(PlayerVisibilityTimer))
+		{
 			GetWorld()->GetTimerManager().SetTimer(
 				PlayerVisibilityTimer,
 				this,
@@ -226,32 +376,54 @@ void AEnemy::OnSeePlayer(APawn* Pawn)
 				PlayerVisibilityCheckInterval,
 				true  // 循环执行
 			);
-
-			const FAttackConfig& Config = AttackConfigs[CurrentAttackIndex];
-			float AttackRange = (Config.Type == EAttackType::Melee) ? Config.MeleeRange : Config.MaxRange;
-
-			// 通知Controller做决策（移动）
-			if (GetDistanceToPlayer() > AttackRange)
-			{
-				if (IsPlayingMontage(Config.Animation.Montage, Config.Animation.SectionName))
-				{
-					if (Config.Type == EAttackType::Melee)
-					{
-						return;
-					}
-					else
-					{
-						StopAllMontages();
-						AIController->MoveToTargetPlayer(Config.AcceptanceRadius);
-					}
-				}
-				else
-				{
-					StopAllMontages();
-					AIController->MoveToTargetPlayer(Config.AcceptanceRadius);
-				}
-			}
 		}
+		
+		
+
+
+		//if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+		//{
+		//	// 调用Controller的Set函数
+		//	if (!AIController->HasTargetPlayer())
+		//	{
+		//		AIController->SetTargetPlayer(Player);
+		//		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Set TargetPlayer")));
+		//	}
+		//	
+		//	// 启动持续检测计时器
+		//	GetWorld()->GetTimerManager().SetTimer(
+		//		PlayerVisibilityTimer,
+		//		this,
+		//		&AEnemy::CheckPlayerVisibility,
+		//		PlayerVisibilityCheckInterval,
+		//		true  // 循环执行
+		//	);
+
+		//	const FAttackConfig& Config = AttackConfigs[CurrentAttackIndex];
+		//	float AttackRange = (Config.Type == EAttackType::Melee) ? Config.MeleeRange : Config.MaxRange;
+
+		//	// 通知Controller做决策（移动）
+		//	if (GetDistanceToPlayer() > AttackRange)
+		//	{
+		//		if (IsPlayingMontage(Config.Animation.Montage, Config.Animation.SectionName))
+		//		{
+		//			if (Config.Type == EAttackType::Melee)
+		//			{
+		//				return;
+		//			}
+		//			else
+		//			{
+		//				StopAllMontages();
+		//				AIController->MoveToTargetPlayer(Config.AcceptanceRadius);
+		//			}
+		//		}
+		//		else
+		//		{
+		//			StopAllMontages();
+		//			AIController->MoveToTargetPlayer(Config.AcceptanceRadius);
+		//		}
+		//	}
+		//}
 	}
 }
 
@@ -312,7 +484,7 @@ void AEnemy::CheckPlayerVisibility()
 	if (!PawnSensing) return;
 
 	// 从黑板获取当前目标
-	UObject* Target = BlackboardComp->GetValueAsObject("TargetPlayer");
+	UObject* Target = BlackboardComp ? BlackboardComp->GetValueAsObject("TargetPlayer") : nullptr;
 	if (!Target)
 	{
 		// 没有目标，停止检测
@@ -321,15 +493,36 @@ void AEnemy::CheckPlayerVisibility()
 	}
 
 	APawn* PlayerPawn = Cast<APawn>(Target);
-	if (!PawnSensing->CouldSeePawn(PlayerPawn))
+	bool bStillVisible = PawnSensing->CouldSeePawn(PlayerPawn);
+
+	if (!bStillVisible)
 	{
-		if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+		bCanSeePlayer = false;
+		// 如果在Alert状态丢失，保持Alert一段时间（或立即降回Suspicious，这里选择立即降回）
+		if (CurrentAIState == EAIState::Alert)
 		{
-			AIController->OnTargetLost();
+			CurrentAIState = EAIState::Suspicious;
+            CurrentSuspicion = SuspicionThreshold * 0.8f; // 保留80%开始衰减
+			if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+			{
+				AIController->SetAIState(EAIState::Suspicious);
+			}
 		}
 		GetWorld()->GetTimerManager().ClearTimer(PlayerVisibilityTimer);
 	}
-	// 如果还能看见，计时器会继续运行，下次再检查
+	else
+	{
+		bCanSeePlayer = true;
+	}
+	//if (!PawnSensing->CouldSeePawn(PlayerPawn))
+	//{
+	//	if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+	//	{
+	//		AIController->OnTargetLost();
+	//	}
+	//	GetWorld()->GetTimerManager().ClearTimer(PlayerVisibilityTimer);
+	//}
+	//// 如果还能看见，计时器会继续运行，下次再检查
 }
 
 float AEnemy::GetDistanceToPlayer() const
@@ -355,6 +548,29 @@ void AEnemy::SetAttackType(EAttackType Type)
     CurrentAttackIndex = 0;
 }
 
+float AEnemy::GetAcceptanceRadius() const
+{
+	if (!AttackConfigs.IsValidIndex(CurrentAttackIndex))
+		return 150.0f;  // 返回默认值
+	
+	return AttackConfigs[CurrentAttackIndex].AcceptanceRadius;
+}
+
+float AEnemy::GetAttackRange() const
+{
+	if (!AttackConfigs.IsValidIndex(CurrentAttackIndex))
+		return 150.0f;  // 返回默认值
+
+	if (AttackConfigs[CurrentAttackIndex].Type == EAttackType::Melee)
+	{
+		return AttackConfigs[CurrentAttackIndex].MeleeRange;
+	}
+	else
+	{
+		return AttackConfigs[CurrentAttackIndex].MaxRange;
+	}
+}
+
 float AEnemy::GetCurrentAimPitch() const
 {
 	return CurrentAimPitch;
@@ -370,6 +586,8 @@ void AEnemy::ExecuteMeleeAttack(const FAttackConfig& AttackConfig)
 void AEnemy::ExecuteProjectileAttack(const FAttackConfig& AttackConfig)
 {	
 	if (!AttackConfig.ProjectileClass) return;
+
+	UpdateAimingData();
 
 	if (AActor* Player = GetPlayerActor())
 	{

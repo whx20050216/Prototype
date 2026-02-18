@@ -23,6 +23,7 @@
 #include "GAS/Input/InputConfig.h"
 #include "GAS/AbilitySet.h"
 #include "Items/WeaponActor.h"
+#include "PrototypeSaveGame.h"
 
 AAlexCharacter::AAlexCharacter()
 {
@@ -239,11 +240,23 @@ void AAlexCharacter::BeginPlay()
 		}
 	}
 
-	UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Claw")));
-    UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Whip")));
-    UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Hammer")));
-    UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Blade")));
-    UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Default")));
+	LoadGame();
+
+	if (UnlockedFormTags.IsEmpty())
+    {
+        // 首次运行，解锁所有形态（测试用）
+        UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Claw")));
+        UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Whip")));
+        UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Hammer")));
+        UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Blade")));
+        UnlockForm(FGameplayTag::RequestGameplayTag(FName("Form.Default")));
+        
+        // UnlockForm 内部会调用 SaveGame()
+    }
+    else
+    {
+        UE_LOG(LogTemp, Log, TEXT("Loaded existing save, skip initial unlock"));
+    }
 }
 
 bool AAlexCharacter::HasMovementInput()
@@ -525,6 +538,50 @@ void AAlexCharacter::PossessedBy(AController* NewController)
 	SwitchToForm(DefaultTag);
 }
 
+void AAlexCharacter::SaveGame()
+{
+	// 1. 创建存档对象
+	if (UPrototypeSaveGame* SaveInstance = Cast<UPrototypeSaveGame>(
+		UGameplayStatics::CreateSaveGameObject(UPrototypeSaveGame::StaticClass())))
+	{
+		// 2. 拷贝数据
+		SaveInstance->SavedUnlockedForms = UnlockedFormTags;
+		if (AttributeSet)
+		{
+			SaveInstance->SavedHealth = AttributeSet->GetHealth();
+		}
+
+		// 3. 写入硬盘（SlotName="PrototypeSave"）
+		if (UGameplayStatics::SaveGameToSlot(SaveInstance, TEXT("PrototypeSave"), 0))
+		{
+			UE_LOG(LogTemp, Log, TEXT(">>> Game Saved"));
+		}
+	}
+}
+
+void AAlexCharacter::LoadGame()
+{
+	// 检查存档是否存在
+	if (UGameplayStatics::DoesSaveGameExist(TEXT("PrototypeSave"), 0))
+	{
+		if (UPrototypeSaveGame* SaveInstance = Cast<UPrototypeSaveGame>(
+			UGameplayStatics::LoadGameFromSlot(TEXT("PrototypeSave"), 0)))
+		{
+			// 恢复数据
+			UnlockedFormTags = SaveInstance->SavedUnlockedForms;
+			if (AttributeSet)
+			{
+				AttributeSet->SetHealth(SaveInstance->SavedHealth);
+			}
+			UE_LOG(LogTemp, Log, TEXT(">>> Game Loaded"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT(">>> No Save Found"));
+	}
+}
+
 void AAlexCharacter::ShowMorphWheel()
 {
 	if (!FormWheelWidgetClass) return;
@@ -622,6 +679,7 @@ void AAlexCharacter::UpdateMorphWheelSelection()
 void AAlexCharacter::UnlockForm(FGameplayTag FormTag)
 {
 	UnlockedFormTags.Add(FormTag);
+	SaveGame();
 }
 
 void AAlexCharacter::AttachWeaponForForm(FGameplayTag FormTag)

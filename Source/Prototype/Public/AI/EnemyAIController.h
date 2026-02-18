@@ -6,6 +6,8 @@
 #include "AIController.h"
 #include "EnemyAIController.generated.h"
 
+enum class EAIState : uint8;
+
 UCLASS()
 class PROTOTYPE_API AEnemyAIController : public AAIController
 {
@@ -44,6 +46,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="AI|Blackboard")
 	bool GetIsAttacking() const;
+
+	UFUNCTION(BlueprintCallable, Category="AI")
+	void SetAIState(EAIState NewState);
 
 	// ºÚ°å²éÑ¯º¯Êý
 	UFUNCTION(BlueprintCallable, Category="AI|Blackboard")
