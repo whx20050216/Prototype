@@ -172,10 +172,14 @@ void AEnemy::UpdateSuspicion(float DeltaTime)
 
 	if (bCanSeePlayer && CurrentAIState != EAIState::Alert)
 	{
+		// 关键：注册自己
+        if (AAlexCharacter* Player = Cast<AAlexCharacter>(GetPlayerActor()))
+        {
+            Player->RegisterSuspicionSource(this);
+        }
+
 		// 看到玩家，累积警觉条
 		CurrentSuspicion += DeltaTime * SuspicionIncreaseRate;
-
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("CurrentSuspicion: %f"), CurrentSuspicion));
 
 		// 进入Suspicious状态
 		if (CurrentAIState == EAIState::Idle)
@@ -205,6 +209,10 @@ void AEnemy::UpdateSuspicion(float DeltaTime)
 		{
 			CurrentSuspicion = 0.f;
 			CurrentAIState = EAIState::Idle;
+            if (AAlexCharacter* Player = Cast<AAlexCharacter>(GetPlayerActor()))
+            {
+                Player->UnregisterSuspicionSource(this);
+            }
 			AIController->SetAIState(EAIState::Idle);
 			AIController->ClearTargetPlayer();
 		}
@@ -334,6 +342,12 @@ void AEnemy::HandleHealthChanged(float CurrentHealth, float MaxHealth, float Del
 
 void AEnemy::OnHealthDepleted()
 {
+	// 死亡时注销（防止尸体还在列表里）
+    if (AAlexCharacter* Player = Cast<AAlexCharacter>(GetPlayerActor()))
+    {
+        Player->UnregisterSuspicionSource(this);
+    }
+
 	// 标记死亡状态
     CurrentAIState = EAIState::Dead;
 	if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))

@@ -24,6 +24,7 @@
 #include "GAS/AbilitySet.h"
 #include "Items/WeaponActor.h"
 #include "PrototypeSaveGame.h"
+#include "Components/ProgressBar.h"
 
 AAlexCharacter::AAlexCharacter()
 {
@@ -118,6 +119,9 @@ void AAlexCharacter::Tick(float DeltaTime)
     {
         UpdateMorphWheelSelection();
     }
+
+	//更新警觉UI
+	UpdateSuspicionUI();
 }
 
 void AAlexCharacter::ResetRun()
@@ -192,6 +196,19 @@ void AAlexCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 void AAlexCharacter::SetOverlappingItem(AItem* Item)
 {
 	OverlappingItem = Item;
+}
+
+void AAlexCharacter::RegisterSuspicionSource(AEnemy* Enemy)
+{
+	if (Enemy && !WatchingEnemies.Contains(Enemy))
+    {
+        WatchingEnemies.Add(Enemy);
+    }
+}
+
+void AAlexCharacter::UnregisterSuspicionSource(AEnemy* Enemy)
+{
+	WatchingEnemies.Remove(Enemy);
 }
 
 void AAlexCharacter::BeginPlay()
@@ -487,6 +504,79 @@ void AAlexCharacter::TAB_Released()
 		bIsSelectingTarget = false;
 		ConfirmLockOn();
 	}
+}
+
+void AAlexCharacter::UpdateSuspicionUI()
+{
+	// 如果没有创建UI，先创建
+	if (!SuspicionWidget && SuspicionWidgetClass)
+	{
+		SuspicionWidget = CreateWidget<UUserWidget>(GetWorld(), SuspicionWidgetClass);
+		if (SuspicionWidget)
+		{
+			SuspicionWidget->AddToViewport();
+			SuspicionBar = Cast<UProgressBar>(SuspicionWidget->GetWidgetFromName("SuspicionBar"));
+		}
+	}
+
+	if (!SuspicionBar) return;
+
+	// 遍历所有敌人，找到最大Suspicion
+    float MaxSuspicion = 0.f;
+    bool bHasAlert = false;
+	
+	// 倒序遍历，清理已衰减到0的敌人
+	for (int32 i = WatchingEnemies.Num() - 1; i >= 0; --i)
+	{
+		AEnemy* Enemy = WatchingEnemies[i];
+		
+		// 检查是否已被销毁
+		if (!IsValid(Enemy))
+		{
+			WatchingEnemies.RemoveAt(i);
+			continue;
+		}
+		
+		float CurrentSuspicion = Enemy->GetCurrentSuspicion();
+		
+		// 关键：Suspicion已衰减到0，从列表移除（遗忘完成）
+		if (CurrentSuspicion <= 0.f)
+		{
+			WatchingEnemies.RemoveAt(i);
+			continue;
+		}
+		
+		MaxSuspicion = FMath::Max(MaxSuspicion, CurrentSuspicion);
+		
+		if (Enemy->GetCurrentAIState() == EAIState::Alert)
+		{
+			bHasAlert = true;
+		}
+	}
+
+	SuspicionBar->SetPercent(MaxSuspicion / 100.f);
+
+	// 颜色逻辑
+    if (bHasAlert || MaxSuspicion >= 100.f)
+    {
+        // 红色：被通缉
+        SuspicionBar->SetFillColorAndOpacity(FLinearColor(1.f, 0.f, 0.f, 1.f)); // Red
+    }
+    else if (MaxSuspicion > 0.f)
+    {
+        // 黄色：警觉中
+        SuspicionBar->SetFillColorAndOpacity(FLinearColor(1.f, 0.7f, 0.f, 1.f)); // Yellow
+    }
+    else
+    {
+        // 隐藏或变灰
+        SuspicionBar->SetPercent(0.f);
+    }
+}
+
+TArray<AEnemy*> AAlexCharacter::GetVisibleEnemies()
+{
+	return TArray<AEnemy*>();
 }
 
 void AAlexCharacter::OnAbilityInputPressed(FGameplayTag InputTag)

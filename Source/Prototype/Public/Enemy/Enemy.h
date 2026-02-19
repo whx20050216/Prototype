@@ -147,6 +147,15 @@ public:
 
 	UPROPERTY(EditAnywhere, Category="AI|Suspicion")
 	float SuspicionThreshold = 100.f;		// 满条进入Alert
+
+	UFUNCTION(BlueprintCallable, Category="AI")
+	float GetCurrentSuspicion() const { return CurrentSuspicion; }
+
+	UFUNCTION(BlueprintCallable, Category="AI")
+	bool IsSeeingPlayer() const { return bCanSeePlayer; }
+
+	UFUNCTION(BlueprintCallable, Category="AI")
+	EAIState GetCurrentAIState() const { return CurrentAIState; }
 	
 	// 当前状态（同步到Blackboard）
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI")

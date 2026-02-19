@@ -10,7 +10,7 @@ UAlexAttributeSet::UAlexAttributeSet()
     InitHealth(100.f);
     InitMaxHealth(100.f);
     InitMana(100.f);
-    InitMana(100.f);
+    InitMaxMana(100.f);
     InitDashCharges(2.f);
     InitMaxDashCharges(2.f);
 }

@@ -30,6 +30,8 @@ class UAbilitySet;
 struct FGameplayAbilitySpecHandle;
 class AWeaponActor;
 class UFormWheelWidget;
+class UProgressBar;
+class AEnemy;
 
 USTRUCT(BlueprintType)
 struct FMorphConfig
@@ -122,6 +124,13 @@ public:
     UFUNCTION(BlueprintCallable, Category="Combat")
     int32 GetAttackComboStep() const { return CurrentComboStep; }
 
+	// 敌人注册/注销（只有看到玩家的敌人才会注册）
+    UFUNCTION()
+    void RegisterSuspicionSource(AEnemy* Enemy);
+    
+    UFUNCTION()
+    void UnregisterSuspicionSource(AEnemy* Enemy);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -188,6 +197,26 @@ protected:
 	// FormWheelWidget实例
 	UPROPERTY()
 	TObjectPtr<UFormWheelWidget> FormWheelWidget;
+
+	// 警觉UI相关配置
+	// 当前正在观察玩家的敌人列表（自动去重）
+    UPROPERTY()
+    TArray<AEnemy*> WatchingEnemies;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	TSubclassOf<UUserWidget> SuspicionWidgetClass;
+
+	UPROPERTY()
+	TObjectPtr<UUserWidget> SuspicionWidget;
+
+	UPROPERTY()
+	TObjectPtr<UProgressBar> SuspicionBar;
+
+	// 更新警觉UI
+    void UpdateSuspicionUI();
+    
+    // 缓存所有敌人（优化：不需要每帧FindAll）
+    TArray<AEnemy*> GetVisibleEnemies();
 
 	// GAS
 	UPROPERTY(VisibleAnywhere, Category = "GAS")
