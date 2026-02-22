@@ -81,6 +81,18 @@ struct FMorphConfig
     USoundBase* SwitchSound = nullptr;
 };
 
+USTRUCT(BlueprintType)
+struct FSurfaceSoundSet
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere)
+    TMap<FName, USoundBase*> SurfaceSounds;  // Tag -> Sound
+
+	UPROPERTY(EditAnywhere)
+    USoundBase* DefaultSound;  // 默认
+};
+
 UCLASS()
 class PROTOTYPE_API AAlexCharacter : public ABaseCharacter, public IPickupInterface, public IAbilitySystemInterface  
 {
@@ -148,6 +160,7 @@ protected:
 	void ATTACK();
 	void TAB_Pressed();
 	void TAB_Released();
+	void PICKUP();
 
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
@@ -280,11 +293,15 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category="Combat", meta=(AllowPrivateAccess="true"))
 	TMap<FGameplayTag, FMorphConfig> FormMorphConfigs;
 
-	// 当前持有的武器实例
+	// 当前武器形态
 	UPROPERTY()
 	TObjectPtr<AWeaponActor> CurrentWeapon;
 
-	// 武器切换函数
+	// 手持武器（如枪、RPG）
+	UPROPERTY()
+	TObjectPtr<AWeaponActor> HeldWeapon;
+
+	// 武器形态切换函数
 	void AttachWeaponForForm(FGameplayTag FormTag);
 	void DetachCurrentWeapon();
 
@@ -309,17 +326,31 @@ private:
 	FGameplayTag CurrentFormTag;
 	
 	/*
-	* 动态脚步声（用tag标签实现地面材质识别）
+	* 动态音效
 	*/
-	UFUNCTION(BlueprintCallable, Category="Footstep")
-	void PlayFootstepSound();
+	UFUNCTION(BlueprintCallable, Category="Audio")
+	void PlaySurfaceSound(ECharacterSoundType SoundType, FName SurfaceTagOverride);
 
-	UPROPERTY(EditAnywhere, Category="Footstep")
-	TMap<FName, USoundBase*> FootstepSounds;  // Tag -> Sound 映射
+	UPROPERTY(EditAnywhere, Category="Audio")
+	TMap<ECharacterSoundType, FSurfaceSoundSet> CharacterSounds;
 
-	UPROPERTY(EditAnywhere, Category="Footstep")
-	USoundBase* DefaultFootstepSound;  // 默认音
+	UFUNCTION(BlueprintCallable, Category="Audio")
+	void PlayFootstepSound() { PlaySurfaceSound(ECharacterSoundType::Footstep, NAME_None); }
 
+	UFUNCTION(BlueprintCallable, Category="Audio")  
+	void PlayFootstepRun()  { PlaySurfaceSound(ECharacterSoundType::FootstepRun, NAME_None); }
+
+	UFUNCTION(BlueprintCallable, Category="Audio")
+	void PlayJumpSound() { PlaySurfaceSound(ECharacterSoundType::Jump, NAME_None); }
+
+	UFUNCTION(BlueprintCallable, Category="Audio")
+	void PlayLandSound() { PlaySurfaceSound(ECharacterSoundType::Land, NAME_None); }
+
+	UFUNCTION(BlueprintCallable, Category="Audio")
+	void PlayAttackSound() { PlaySurfaceSound(ECharacterSoundType::Attack, NAME_None); }
+	
+	UFUNCTION(BlueprintCallable, Category="Audio")
+	void PlayHitSound() { PlaySurfaceSound(ECharacterSoundType::Hit, NAME_None); }
 
 	/*
 	* 软锁定
@@ -604,6 +635,9 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> MorphWheelAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInputAction> PickupAction;
 
 	UPROPERTY(VisibleAnywhere)
 	AItem* OverlappingItem;

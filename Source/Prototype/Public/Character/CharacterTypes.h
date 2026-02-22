@@ -35,3 +35,15 @@ enum class EMorphType : uint8
     EMT_Whip        UMETA(DisplayName = "Whip"),        // 鞭
     EMT_Hammer      UMETA(DisplayName = "Hammer")       // 锤
 };
+
+// 角色声音类型枚举
+UENUM(BlueprintType)
+enum class ECharacterSoundType : uint8
+{
+    Footstep	UMETA(DisplayName="FootStep"),	
+	FootstepRun UMETA(DisplayName="FootStepRun"),
+    Jump		UMETA(DisplayName="Jump"),
+    Land		UMETA(DisplayName="Land"),
+    Attack		UMETA(DisplayName="Attack"),
+    Hit			UMETA(DisplayName="Hit")
+};

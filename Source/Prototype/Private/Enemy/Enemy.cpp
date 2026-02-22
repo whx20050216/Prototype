@@ -14,6 +14,7 @@
 #include "HUD/HealthWidget.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/OverlapResult.h"
+#include "Items/WeaponActor.h"
 
 AEnemy::AEnemy()
 {
@@ -156,6 +157,22 @@ void AEnemy::BeginPlay()
 	}
 
 	HideHealthBar();
+
+	// 生成武器
+	if (AttackConfigs.IsValidIndex(CurrentAttackIndex))
+	{
+		if (!AttackConfigs[CurrentAttackIndex].WeaponClass) return;
+
+		FActorSpawnParameters Params;
+		Params.Owner = this;
+		Weapon = GetWorld()->SpawnActor<AWeaponActor>(AttackConfigs[CurrentAttackIndex].WeaponClass, Params);
+		if (Weapon)
+		{
+			FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, true);
+			Weapon->AttachToComponent(GetMesh(), AttachRules, FName("hand_r"));
+			Weapon->SetInstigator(this);
+		}
+	}
 }
 
 void AEnemy::UpdateSuspicion(float DeltaTime)
@@ -207,6 +224,7 @@ void AEnemy::UpdateSuspicion(float DeltaTime)
 		CurrentSuspicion -= DeltaTime * SuspicionDecayRate;
 		if (CurrentSuspicion <= 0.f)
 		{
+			bIsAiming = false;
 			CurrentSuspicion = 0.f;
 			CurrentAIState = EAIState::Idle;
             if (AAlexCharacter* Player = Cast<AAlexCharacter>(GetPlayerActor()))
@@ -267,6 +285,12 @@ void AEnemy::EnterAlertState()
 	}
 	GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, 
         FString::Printf(TEXT("%s Enter Alert State And Broadcast！"), *GetName()));
+	const FAttackConfig& Config = AttackConfigs[CurrentAttackIndex];
+	if (Config.Type != EAttackType::Melee)
+	{
+		bIsAiming = true;
+		PlayAnimation(Config.Animation.Montage, Config.Animation.SectionName, Config.Animation.PlayRate);
+	}
 }
 
 void AEnemy::ForceEnterAlert()
@@ -391,53 +415,6 @@ void AEnemy::OnSeePlayer(APawn* Pawn)
 				true  // 循环执行
 			);
 		}
-		
-		
-
-
-		//if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
-		//{
-		//	// 调用Controller的Set函数
-		//	if (!AIController->HasTargetPlayer())
-		//	{
-		//		AIController->SetTargetPlayer(Player);
-		//		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Set TargetPlayer")));
-		//	}
-		//	
-		//	// 启动持续检测计时器
-		//	GetWorld()->GetTimerManager().SetTimer(
-		//		PlayerVisibilityTimer,
-		//		this,
-		//		&AEnemy::CheckPlayerVisibility,
-		//		PlayerVisibilityCheckInterval,
-		//		true  // 循环执行
-		//	);
-
-		//	const FAttackConfig& Config = AttackConfigs[CurrentAttackIndex];
-		//	float AttackRange = (Config.Type == EAttackType::Melee) ? Config.MeleeRange : Config.MaxRange;
-
-		//	// 通知Controller做决策（移动）
-		//	if (GetDistanceToPlayer() > AttackRange)
-		//	{
-		//		if (IsPlayingMontage(Config.Animation.Montage, Config.Animation.SectionName))
-		//		{
-		//			if (Config.Type == EAttackType::Melee)
-		//			{
-		//				return;
-		//			}
-		//			else
-		//			{
-		//				StopAllMontages();
-		//				AIController->MoveToTargetPlayer(Config.AcceptanceRadius);
-		//			}
-		//		}
-		//		else
-		//		{
-		//			StopAllMontages();
-		//			AIController->MoveToTargetPlayer(Config.AcceptanceRadius);
-		//		}
-		//	}
-		//}
 	}
 }
 
@@ -483,7 +460,6 @@ void AEnemy::UpdateAimingData()
 		FRotator AimRot(CurrentAimPitch, GetActorRotation().Yaw, 0.f);
 		FVector AimDir = AimRot.Vector();
 
-		CachedMuzzleLocation = ShoulderLocation + (AimDir * 150.f);
 		CachedMuzzleRotation = AimRot;
 	}
 }
@@ -528,15 +504,6 @@ void AEnemy::CheckPlayerVisibility()
 	{
 		bCanSeePlayer = true;
 	}
-	//if (!PawnSensing->CouldSeePawn(PlayerPawn))
-	//{
-	//	if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
-	//	{
-	//		AIController->OnTargetLost();
-	//	}
-	//	GetWorld()->GetTimerManager().ClearTimer(PlayerVisibilityTimer);
-	//}
-	//// 如果还能看见，计时器会继续运行，下次再检查
 }
 
 float AEnemy::GetDistanceToPlayer() const
@@ -599,44 +566,14 @@ void AEnemy::ExecuteMeleeAttack(const FAttackConfig& AttackConfig)
 
 void AEnemy::ExecuteProjectileAttack(const FAttackConfig& AttackConfig)
 {	
-	if (!AttackConfig.ProjectileClass) return;
+	if (!Weapon) return;
 
 	UpdateAimingData();
 
-	if (AActor* Player = GetPlayerActor())
-	{
-		////发射点偏移，避免从地面射出
-		//FVector MuzzleLocation = GetActorLocation() + GetActorForwardVector() * 150.f + FVector(0, 0, 50);
-		////计算从枪口到玩家的旋转角，让子弹"瞄准"玩家
-		//FVector TargetLocation = Player->GetActorLocation() + FVector(0, 0, 50.f);
-		//FRotator MuzzleRotation = (TargetLocation - MuzzleLocation).Rotation();
+	FVector MuzzleLocation = Weapon->GetMuzzlePoint()->GetComponentLocation();
+	Weapon->Fire(MuzzleLocation, CachedMuzzleRotation, AttackConfig.Damage);
 
-		/*
-		* AdjustIfPossibleButAlwaysSpawn	尝试微调位置避开碰撞，但必定生成（可能卡在墙里）
-		* DontSpawnIfColliding	如果位置被占，直接不生成
-		* SpawnEvenIfColliding	不管有没有碰撞，硬生生成（会瞬移或卡住）
-		* SpawnIfPossible	能避开就生成，避不开就不生成
-		*/
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		SpawnParams.Instigator = this;
-		SpawnParams.Owner = this;
-
-		AProjectile* Projectile = GetWorld()->SpawnActor<AProjectile>(
-			AttackConfig.ProjectileClass,
-			CachedMuzzleLocation,
-			CachedMuzzleRotation,
-			SpawnParams
-		);
-
-		PlayAnimation(AttackConfig.Animation.Montage, AttackConfig.Animation.SectionName, AttackConfig.Animation.PlayRate);
-
-		if (Projectile)
-		{
-			Projectile->Damage = AttackConfig.Damage;
-			GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Spawn Projectile,Damage=%.0f"), AttackConfig.Damage));
-		}
-	}
+	//PlayAnimation(AttackConfig.Animation.Montage, AttackConfig.Animation.SectionName, AttackConfig.Animation.PlayRate);
 }
 
 void AEnemy::ExecuteRaycastAttack(const FAttackConfig& AttackConfig)

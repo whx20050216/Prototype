@@ -49,10 +49,6 @@ struct FCharacterAnimation
 	// 播放速率
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation", meta=(ClampMin = 0.1))
 	float PlayRate = 1.0f;
-
-	// 是否循环
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Animation")
-	bool bLoop = false;
 };
 
 UCLASS()

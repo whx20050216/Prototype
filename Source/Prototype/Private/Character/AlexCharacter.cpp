@@ -163,6 +163,7 @@ void AAlexCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		EnhancedInputComponent->BindAction(LockOnAction, ETriggerEvent::Completed, this, &AAlexCharacter::TAB_Released);
 		EnhancedInputComponent->BindAction(MorphWheelAction, ETriggerEvent::Started, this, &AAlexCharacter::ShowMorphWheel);
 		EnhancedInputComponent->BindAction(MorphWheelAction, ETriggerEvent::Completed, this, &AAlexCharacter::HideMorphWheelAndConfirm);
+		EnhancedInputComponent->BindAction(PickupAction, ETriggerEvent::Started, this, &AAlexCharacter::PICKUP);
 
 		// === GAS Ability 输入改为通过 InputConfig 绑定 ===
 		if (InputConfig)
@@ -458,28 +459,36 @@ void AAlexCharacter::CLIMB()
 
 void AAlexCharacter::ATTACK()
 {
-    if (!AbilitySystemComponent) return;
-    
-    // 检查是否已有激活的 Attack Ability（用于连击）
-    for (FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
-    {
-        if (Spec.Ability && Spec.Ability->AbilityTags.HasTag(FGameplayTag::RequestGameplayTag(FName("Ability.Attack"))))
-        {
-            if (Spec.IsActive())
-            {
-                // 已经激活，发送输入用于连击
-                AbilitySystemComponent->AbilitySpecInputPressed(Spec);
-                return;
-            }
-            // 找到了但未激活，不要return，跳出去激活它
-            break;
-        }
-    }
-    
-    // 没有激活的 Attack Ability，尝试激活
-    FGameplayTagContainer TagContainer;
-    TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Attack")));
-    AbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
+	if (HeldWeapon)
+	{
+		//HeldWeapon->Fire()
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Fire"));
+	}
+	else
+	{
+		if (!AbilitySystemComponent) return;
+		
+		// 检查是否已有激活的 Attack Ability（用于连击）
+		for (FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
+		{
+		    if (Spec.Ability && Spec.Ability->AbilityTags.HasTag(FGameplayTag::RequestGameplayTag(FName("Ability.Attack"))))
+		    {
+		        if (Spec.IsActive())
+		        {
+		            // 已经激活，发送输入用于连击
+		            AbilitySystemComponent->AbilitySpecInputPressed(Spec);
+		            return;
+		        }
+		        // 找到了但未激活，不要return，跳出去激活它
+		        break;
+		    }
+		}
+		
+		// 没有激活的 Attack Ability，尝试激活
+		FGameplayTagContainer TagContainer;
+		TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Attack")));
+		AbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
+	}
 }
 
 void AAlexCharacter::TAB_Pressed()
@@ -503,6 +512,44 @@ void AAlexCharacter::TAB_Released()
 	{
 		bIsSelectingTarget = false;
 		ConfirmLockOn();
+	}
+}
+
+void AAlexCharacter::PICKUP()
+{
+	if (OverlappingItem)
+	{
+		// 情况1：拾取枪（AWeaponActor）
+		if (AWeaponActor* Gun = Cast<AWeaponActor>(OverlappingItem))
+		{
+			// 丢弃旧枪（如果有）
+			if (HeldWeapon && HeldWeapon != Gun)
+			{
+				HeldWeapon->Drop(GetActorLocation() + GetActorForwardVector() * 100.f);
+				if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))
+				{
+					AnimInst->bIsHoldingGun = false;
+				}
+			}
+			// 装备新枪
+			Gun->EquipTo(this);
+			HeldWeapon = Gun;
+			if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))
+			{
+				AnimInst->bIsHoldingGun = true;
+			}
+		}
+	}
+	else
+	{
+		if (HeldWeapon)
+		{
+			HeldWeapon->Drop(GetActorLocation() + GetActorForwardVector() * 100.f);
+			if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))
+			{
+				AnimInst->bIsHoldingGun = false;
+			}
+		}
 	}
 }
 
@@ -872,41 +919,81 @@ const FMorphConfig& AAlexCharacter::GetCurrentMorphConfig() const
 	return EmptyConfig;
 }
 
-void AAlexCharacter::PlayFootstepSound()
+void AAlexCharacter::PlaySurfaceSound(ECharacterSoundType SoundType, FName SurfaceTagOverride)
 {
-	FVector Start = GetActorLocation();
-    FVector End = Start - FVector(0, 0, 100);
+	// 1. 查配置是否存在
+	if (!CharacterSounds.Contains(SoundType)) return;
 
-	DrawDebugLine(GetWorld(), Start, End, FColor::Red, false, -1, 0, 3.f);
+	const FSurfaceSoundSet& SoundSet = CharacterSounds[SoundType];
+	USoundBase* SoundToPlay = SoundSet.DefaultSound;
 
-	FHitResult Hit;
-    FCollisionQueryParams Params;
-    Params.AddIgnoredActor(this);
-
-	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	// 2. 如果没给特定Tag，就射线检测地面（仅脚步/落地需要）
+	FName TargetTag = SurfaceTagOverride;
+	if (TargetTag.IsNone() && (SoundType == ECharacterSoundType::Footstep || SoundType == ECharacterSoundType::Land))
 	{
-		if (AActor* HitActor = Hit.GetActor())
+		FHitResult Hit;
+		FVector Start = GetActorLocation();
+		FVector End = Start - FVector(0, 0, 100.f);
+		if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility))
 		{
-			// 遍历配置的Tag-Sound映射，找到匹配就播放
-			for (const auto& Pair : FootstepSounds)
+			if (AActor* HitActor = Hit.GetActor())
 			{
-				if (HitActor->ActorHasTag(Pair.Key))
-				{
-					if (Pair.Value)
-					{
-						UGameplayStatics::PlaySoundAtLocation(this, Pair.Value, Hit.ImpactPoint);
-					}
-					return;
-				}
-			}
-
-			// 没有匹配到特定Tag，播放默认
-			if (DefaultFootstepSound)
-			{
-				UGameplayStatics::PlaySoundAtLocation(this, DefaultFootstepSound, Hit.ImpactPoint);
+				for (const auto& Pair : SoundSet.SurfaceSounds)
+                {
+                    if (HitActor->ActorHasTag(Pair.Key))
+                    {
+                        TargetTag = Pair.Key;
+                        break;
+                    }
+                }
 			}
 		}
 	}
+
+	// 3. 播放对应音效
+	if (!TargetTag.IsNone() && SoundSet.SurfaceSounds.Contains(TargetTag))
+    {
+        SoundToPlay = SoundSet.SurfaceSounds[TargetTag];
+    }
+
+	if (SoundToPlay)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, SoundToPlay, GetActorLocation());
+    }
+
+	//FVector Start = GetActorLocation();
+ //   FVector End = Start - FVector(0, 0, 100);
+
+	//DrawDebugLine(GetWorld(), Start, End, FColor::Red, false, -1, 0, 3.f);
+
+	//FHitResult Hit;
+ //   FCollisionQueryParams Params;
+ //   Params.AddIgnoredActor(this);
+
+	//if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	//{
+	//	if (AActor* HitActor = Hit.GetActor())
+	//	{
+	//		// 遍历配置的Tag-Sound映射，找到匹配就播放
+	//		for (const auto& Pair : FootstepSounds)
+	//		{
+	//			if (HitActor->ActorHasTag(Pair.Key))
+	//			{
+	//				if (Pair.Value)
+	//				{
+	//					UGameplayStatics::PlaySoundAtLocation(this, Pair.Value, Hit.ImpactPoint);
+	//				}
+	//				return;
+	//			}
+	//		}
+
+	//		// 没有匹配到特定Tag，播放默认
+	//		if (DefaultFootstepSound)
+	//		{
+	//			UGameplayStatics::PlaySoundAtLocation(this, DefaultFootstepSound, Hit.ImpactPoint);
+	//		}
+	//	}
+	//}
 }
 
 void AAlexCharacter::UpdateLockOnUI()

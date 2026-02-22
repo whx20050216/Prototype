@@ -12,6 +12,7 @@ class AProjectile;
 class UBlackboardComponent;
 class UBehaviorTree;
 class UHealthWidget;
+class AWeaponActor;
 
 // 攻击类型枚举
 UENUM(BlueprintType)
@@ -41,6 +42,10 @@ struct FAttackConfig
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat|Animation")
 	FCharacterAnimation Animation;
 
+	// 武器配置
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
+	TSubclassOf<AWeaponActor> WeaponClass;
+
 	// 基础伤害
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
 	float Damage = 10.0f;
@@ -60,10 +65,6 @@ struct FAttackConfig
 	// 与目标的可接受距离
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
 	float AcceptanceRadius = 150.0f;
-
-	// 子弹类（仅弹道攻击用）
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat", meta=(EditCondition="Type == EAttackType::Projectile"))
-	TSubclassOf<AProjectile> ProjectileClass = nullptr;
 
 	UPROPERTY(EditAnywhere, Category="Combat|Melee", meta=(EditCondition="Type == EAttackType::Melee"))
     float MeleeRadius = 100.f;  // 检测半径
@@ -104,6 +105,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
 	int32 CurrentAttackIndex = 0;  // 当前使用的攻击配置索引
+
+	// 专为枪类敌人设计
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+    bool bIsAiming = false;  // 是否处于瞄准状态（循环）
 
 	// AI感知组件
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AI")
@@ -163,6 +168,10 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+
+	// 武器配置
+	UPROPERTY(VisibleAnywhere, Category = "Combat")
+	TObjectPtr<AWeaponActor> Weapon;
 
 	// 警觉系统配置
 	float CurrentSuspicion = 0.f;

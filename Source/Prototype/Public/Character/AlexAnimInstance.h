@@ -50,4 +50,7 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "WallRun")
 	FVector WallRunDirection;
+
+	UPROPERTY(BlueprintReadOnly)
+	bool bIsHoldingGun = false;  // ÊÇ·ñ³ÖÇ¹
 };
