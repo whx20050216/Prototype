@@ -221,6 +221,9 @@ protected:
     UFUNCTION()
     void OnHealthDepleted();
 
+	UPROPERTY(EditDefaultsOnly, Category = "Death")
+	UAnimMontage* DeathMontage;
+
 	// 感知回调（看到玩家时触发）
 	UFUNCTION()
     void OnSeePlayer(APawn* Pawn);

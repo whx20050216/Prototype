@@ -3,6 +3,9 @@
 
 #include "GAS/AlexAttributeSet.h"
 #include "Net/UnrealNetwork.h"
+#include "Character/AlexCharacter.h"
+#include "GameplayEffectExtension.h"
+#include "Items/WeaponActor.h"
 
 UAlexAttributeSet::UAlexAttributeSet()
 {
@@ -13,6 +16,8 @@ UAlexAttributeSet::UAlexAttributeSet()
     InitMaxMana(100.f);
     InitDashCharges(2.f);
     InitMaxDashCharges(2.f);
+    InitAmmo_Bullet(30.f);
+    InitAmmo_Rocket(1.f);
 }
 
 void UAlexAttributeSet::OnRep_Health(const FGameplayAttributeData& OldValue) const
@@ -60,6 +65,18 @@ void UAlexAttributeSet::OnRep_MaxDashCharges(const FGameplayAttributeData& OldVa
 {
 }
 
+void UAlexAttributeSet::OnRep_AmmoBullet(const FGameplayAttributeData& OldValue) const
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAlexAttributeSet, Ammo_Bullet, OldValue);
+	OnAmmoBulletChanged.ExecuteIfBound();
+}
+
+void UAlexAttributeSet::OnRep_AmmoRocket(const FGameplayAttributeData& OldValue) const
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAlexAttributeSet, Ammo_Rocket, OldValue);
+	OnAmmoRocketChanged.ExecuteIfBound();
+}
+
 void UAlexAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	// Clamp数值
@@ -75,6 +92,14 @@ void UAlexAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, 
     {
         NewValue = FMath::Clamp(NewValue, 0.f, GetMaxDashCharges());
     }
+	else if (Attribute == GetAmmo_BulletAttribute())  // 本地预测触发
+    {
+        OnAmmoBulletChanged.ExecuteIfBound();
+    }
+    else if (Attribute == GetAmmo_RocketAttribute())
+    {
+        OnAmmoRocketChanged.ExecuteIfBound();
+    }
 }
 
 void UAlexAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -88,4 +113,29 @@ void UAlexAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME_CONDITION_NOTIFY(UAlexAttributeSet, MaxMana, COND_None, REPNOTIFY_Always);
     DOREPLIFETIME_CONDITION_NOTIFY(UAlexAttributeSet, DashCharges, COND_None, REPNOTIFY_Always);
     DOREPLIFETIME_CONDITION_NOTIFY(UAlexAttributeSet, MaxDashCharges, COND_None, REPNOTIFY_Always);
+    DOREPLIFETIME_CONDITION_NOTIFY(UAlexAttributeSet, Ammo_Bullet, COND_None, REPNOTIFY_Always);
+    DOREPLIFETIME_CONDITION_NOTIFY(UAlexAttributeSet, Ammo_Rocket, COND_None, REPNOTIFY_Always);
+}
+
+void UAlexAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
+{
+    Super::PostGameplayEffectExecute(Data);
+
+	// 获取 Owner（AlexCharacter）
+    if (AAlexCharacter* Character = Cast<AAlexCharacter>(GetOwningActor()))
+    {
+        if (AWeaponActor* Weapon = Character->GetHeldWeapon())
+        {
+            // 子弹变化 -> 同步到 Weapon.CurrentAmmo
+            if (Data.EvaluatedData.Attribute == GetAmmo_BulletAttribute())
+            {
+                Weapon->CurrentAmmo = GetAmmo_Bullet();
+            }
+            // 火箭弹变化
+            else if (Data.EvaluatedData.Attribute == GetAmmo_RocketAttribute())
+            {
+                Weapon->CurrentAmmo = GetAmmo_Rocket();  // 注意：Weapon用一个字段存当前弹药即可，通过AmmoType区分
+            }
+        }
+    }
 }

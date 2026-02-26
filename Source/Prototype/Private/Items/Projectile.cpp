@@ -3,7 +3,10 @@
 
 #include "Items/Projectile.h"
 #include "Components/SphereComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
 #include "Kismet/GameplayStatics.h"
 
 AProjectile::AProjectile()
@@ -20,6 +23,13 @@ AProjectile::AProjectile()
 	CollisionComp->SetCollisionObjectType(ECC_WorldDynamic);
 	CollisionComp->SetCollisionResponseToAllChannels(ECR_Block);
 	CollisionComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block); // 确保阻挡玩家
+
+	ProjectileMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ProjectileMesh"));
+    ProjectileMesh->SetupAttachment(CollisionComp);
+    ProjectileMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	TrailEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("TrailEffect"));
+    TrailEffect->SetupAttachment(CollisionComp);
 
 	MovementComp = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileComp"));
 	MovementComp->UpdatedComponent = CollisionComp;
@@ -40,9 +50,38 @@ void AProjectile::OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, U
 {
 	if (OtherActor && OtherActor != GetInstigator())
 	{
+		// 范围伤害（RPG）或单体伤害（子弹）
+		if (ExplosionRadius > 0.0f)
+        {
+            Explode();
+        }
+		else
+		{
+			UGameplayStatics::ApplyDamage(OtherActor, Damage, nullptr, this, UDamageType::StaticClass());
+		}
 		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, FString::Printf(TEXT("Try Damage: %f"), Damage));
-		UGameplayStatics::ApplyDamage(OtherActor, Damage, nullptr, this, UDamageType::StaticClass());
+		SpawnImpactEffect(Hit);
 	}
 	Destroy();
+}
+
+void AProjectile::Explode()
+{
+	// 范围伤害（RPG用）
+    UGameplayStatics::ApplyRadialDamage(
+        this, 
+        Damage, 
+        GetActorLocation(), 
+        ExplosionRadius,
+        UDamageType::StaticClass(),
+        TArray<AActor*>(), // 忽略列表
+        this, 
+        GetInstigatorController(),
+        true // 包含物理冲击
+    );
+}
+
+void AProjectile::SpawnImpactEffect(const FHitResult& Hit)
+{
 }
 

@@ -18,7 +18,16 @@ public:
 	class USphereComponent* CollisionComp;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Projectile")
+    class UStaticMeshComponent* ProjectileMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Projectile")
+    class UNiagaraComponent* TrailEffect;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Projectile")
 	class UProjectileMovementComponent* MovementComp;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
+    float ExplosionRadius = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
 	float Damage = 10.0f;
@@ -28,4 +37,10 @@ protected:
 
 	UFUNCTION()
 	void OnHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
+
+	// 爆炸效果
+	void Explode();
+
+	// 生成命中特效
+	void SpawnImpactEffect(const FHitResult& Hit);
 };

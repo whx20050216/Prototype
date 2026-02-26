@@ -29,4 +29,9 @@ void UAlexAnimInstance::NativeUpdateAnimation(float DeltaTime)
 		GroundSpeed = UKismetMathLibrary::VSizeXY(CharacterMovement->Velocity);
 		IsFalling = CharacterMovement->IsFalling();
 	}
+
+	AimPitch = AlexCharacter->GetAimPitch();
+	AimYaw = AlexCharacter->GetAimYaw();
+
+	bIsWallRunning = AlexCharacter->GetbIsWallRunning();
 }

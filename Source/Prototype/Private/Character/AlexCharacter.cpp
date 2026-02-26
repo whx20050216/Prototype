@@ -15,12 +15,15 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "HUD/HealthWidget.h"
 #include "HUD/FormWheelWidget.h"
+#include "HUD/AmmoWidget.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Kismet/GameplayStatics.h"
 #include "Enemy/Enemy.h"
 #include "AbilitySystemComponent.h"
 #include "GAS/AlexAttributeSet.h"
 #include "GAS/Input/InputConfig.h"
+#include "GAS/Abilities/GA_AlexAttack.h"
+#include "GAS/Abilities/GA_RangeAttack.h"
 #include "GAS/AbilitySet.h"
 #include "Items/WeaponActor.h"
 #include "PrototypeSaveGame.h"
@@ -122,6 +125,12 @@ void AAlexCharacter::Tick(float DeltaTime)
 
 	//更新警觉UI
 	UpdateSuspicionUI();
+
+	//更新瞄准角度
+	if (HeldWeapon)
+	{
+		UpdateAimingData();
+	}
 }
 
 void AAlexCharacter::ResetRun()
@@ -164,12 +173,18 @@ void AAlexCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		EnhancedInputComponent->BindAction(MorphWheelAction, ETriggerEvent::Started, this, &AAlexCharacter::ShowMorphWheel);
 		EnhancedInputComponent->BindAction(MorphWheelAction, ETriggerEvent::Completed, this, &AAlexCharacter::HideMorphWheelAndConfirm);
 		EnhancedInputComponent->BindAction(PickupAction, ETriggerEvent::Started, this, &AAlexCharacter::PICKUP);
+		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AAlexCharacter::ATTACK);
+		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Completed, this, &AAlexCharacter::ATTACK_Released);
 
 		// === GAS Ability 输入改为通过 InputConfig 绑定 ===
 		if (InputConfig)
 		{
 			for (const FAbilityInputBinding& Binding : InputConfig->AbilityInputBindings)
 			{
+				if (Binding.InputAction == AttackAction)
+				{
+					continue;
+				}
 				if (Binding.InputAction && Binding.InputTag.IsValid())
 				{
 					// Pressed
@@ -210,6 +225,75 @@ void AAlexCharacter::RegisterSuspicionSource(AEnemy* Enemy)
 void AAlexCharacter::UnregisterSuspicionSource(AEnemy* Enemy)
 {
 	WatchingEnemies.Remove(Enemy);
+}
+
+void AAlexCharacter::UpdateAimingData()
+{
+	if (!LockedTarget)
+	{
+		CachedMuzzleRotation = GetActorRotation();
+		CurrentAimPitch = 0.f;
+		CurrentAimYaw = 0.f;
+		return;
+	}
+
+	// 1. 世界空间的目标方向
+	FVector PlayerLocation = GetActorLocation();
+	FVector TargetLocation = LockedTarget->GetActorLocation();
+	FVector ToTarget = (TargetLocation - PlayerLocation).GetSafeNormal();
+
+	// 2. 关键：转到角色局部坐标系（以角色当前Rotation为原点）
+	// 这样 LocalDir 的 X=前, Y=右, Z=上 都是相对于角色的
+	FVector LocalDir = GetActorRotation().UnrotateVector(ToTarget);
+
+	// 3. 从局部向量提取旋转轨迹
+	// Yaw（水平）：看X(前)和Y(右)构成的平面，atan2(Y, X) 就是左右要转的角度
+	// 正=向右转，负=向左转
+	CurrentAimYaw = FMath::Atan2(LocalDir.Y, LocalDir.X) * (180.f / PI);
+
+	// Pitch（垂直）：看Z(上)和水平距离(XY平面长度)
+	// 正=向上抬头，负=向下低头
+	float HorizontalDist = FMath::Sqrt(LocalDir.X * LocalDir.X + LocalDir.Y * LocalDir.Y);
+	CurrentAimPitch = FMath::Atan2(LocalDir.Z, HorizontalDist) * (180.f / PI);
+
+	CurrentAimYaw = FMath::Clamp(CurrentAimYaw, -50.f, 50.f);
+	CurrentAimPitch = FMath::Clamp(CurrentAimPitch, -50.f, 50.f);
+
+	FRotator ActorRot = GetActorRotation();
+	CachedMuzzleRotation = FRotator(CurrentAimPitch, ActorRot.Yaw + CurrentAimYaw, 0.f);
+}
+
+void AAlexCharacter::GetAmmoDisplay(int32& OutCurrent, int32& OutReserve) const
+{
+	OutCurrent = 0;
+    OutReserve = 0;
+    
+    if (!HeldWeapon) return;
+    
+    // 当前弹夹从 GAS 取
+    if (HeldWeapon->GetAmmoType().MatchesTag(FGameplayTag::RequestGameplayTag(FName("Ammo.Bullet"))))
+        OutCurrent = static_cast<int32>(GetAttributeSet()->GetAmmo_Bullet());
+    else
+        OutCurrent = static_cast<int32>(GetAttributeSet()->GetAmmo_Rocket());
+    
+    // 后备从 Weapon 取
+    OutReserve = HeldWeapon->ReserveAmmo;
+}
+
+void AAlexCharacter::SetHeldWeapon(AWeaponActor* NewWeapon)
+{
+	if (HeldWeapon != NewWeapon)
+    {
+        AWeaponActor* OldWeapon = HeldWeapon;
+        HeldWeapon = NewWeapon;
+        
+        // 广播武器变更事件（UI 监听这个）
+        OnHeldWeaponChanged.Broadcast(NewWeapon, OldWeapon);
+        
+        UE_LOG(LogTemp, Log, TEXT("Weapon Changed: %s -> %s"), 
+            OldWeapon ? *OldWeapon->GetName() : TEXT("None"),
+            NewWeapon ? *NewWeapon->GetName() : TEXT("None"));
+    }
 }
 
 void AAlexCharacter::BeginPlay()
@@ -275,6 +359,16 @@ void AAlexCharacter::BeginPlay()
     {
         UE_LOG(LogTemp, Log, TEXT("Loaded existing save, skip initial unlock"));
     }
+
+	if (IsLocallyControlled() && AmmoWidgetClass)
+	{
+		AmmoWidget = CreateWidget<UAmmoWidget>(GetWorld()->GetFirstPlayerController(), AmmoWidgetClass);
+		if (AmmoWidget)
+		{
+			AmmoWidget->AddToViewport(100);
+			AmmoWidget->SetVisibility(ESlateVisibility::Hidden);
+		}
+	}
 }
 
 bool AAlexCharacter::HasMovementInput()
@@ -459,10 +553,25 @@ void AAlexCharacter::CLIMB()
 
 void AAlexCharacter::ATTACK()
 {
+	if (LockedTarget)
+    {
+        FVector TargetLocation = LockedTarget->GetActorLocation();
+        FVector Direction = TargetLocation - GetActorLocation();
+        Direction.Z = 0; // 保持水平，不抬头低头
+        
+        if (!Direction.IsNearlyZero())
+        {
+            FRotator TargetRotation = Direction.Rotation();
+            // 瞬间转向
+            SetActorRotation(TargetRotation);
+        }
+    }
+
 	if (HeldWeapon)
 	{
-		//HeldWeapon->Fire()
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Fire"));
+		FGameplayTagContainer AttackTags;
+        AttackTags.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.AttackRanged")));
+        AbilitySystemComponent->TryActivateAbilitiesByTag(AttackTags);
 	}
 	else
 	{
@@ -471,8 +580,9 @@ void AAlexCharacter::ATTACK()
 		// 检查是否已有激活的 Attack Ability（用于连击）
 		for (FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
 		{
-		    if (Spec.Ability && Spec.Ability->AbilityTags.HasTag(FGameplayTag::RequestGameplayTag(FName("Ability.Attack"))))
+		    if (Spec.Ability && Spec.Ability->IsA(UGA_AlexAttack::StaticClass()))
 		    {
+				UE_LOG(LogTemp, Warning, TEXT("Found Attack Spec: %s, Active: %d"), *Spec.Ability->GetName(), Spec.IsActive());
 		        if (Spec.IsActive())
 		        {
 		            // 已经激活，发送输入用于连击
@@ -488,6 +598,21 @@ void AAlexCharacter::ATTACK()
 		FGameplayTagContainer TagContainer;
 		TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Attack")));
 		AbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
+	}
+}
+
+void AAlexCharacter::ATTACK_Released()
+{
+	if (AbilitySystemComponent)
+	{
+		for (FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
+		{
+			if (Spec.IsActive() && Spec.Ability->AbilityTags.HasTag(FGameplayTag::RequestGameplayTag(FName("Ability.AttackRanged"))))
+			{
+				AbilitySystemComponent->CancelAbility(Spec.Ability);
+                break;
+			}
+		}
 	}
 }
 
@@ -549,6 +674,7 @@ void AAlexCharacter::PICKUP()
 			{
 				AnimInst->bIsHoldingGun = false;
 			}
+			HeldWeapon = nullptr;
 		}
 	}
 }
@@ -673,6 +799,45 @@ void AAlexCharacter::PossessedBy(AController* NewController)
 	// 授予默认形态的技能组（替代硬编码Give Dash/Attack）
 	FGameplayTag DefaultTag = FGameplayTag::RequestGameplayTag(FName("Form.Default"));
 	SwitchToForm(DefaultTag);
+
+	// ============================================================================
+	// GAS 架构警告 / GAMEPLAYABILITYSYSTEM ARCHITECTURE WARNING
+	// 
+	// 【问题描述】
+	// 以下 GA_RangeAttack 是通过 AbilitySystemComponent->GiveAbility() 硬编码授予的，
+	// 它没有被纳入 FormAbilitySets（UAbilitySet）的统一管理生命周期。
+	// 
+	// 【技术后果】
+	// 1. 能力残留（Ability Leak）：
+	//    SwitchToForm() 切换形态时，只会清理 CurrentFormAbilityHandles 中记录的能力句柄。
+	//    GA_RangeAttack 不在此列表中，因此切换形态后会一直残留在 ASC 的 ActivatableAbilities 
+	//    列表中，即使当前是近战形态，GA_RangeAttack 的 Spec 依然存在且可被遍历到。
+	//
+	// 2. 遍历优先级冲突：
+	//    在 ATTACK() 函数中遍历 GetActivatableAbilities() 时，如果仅通过 
+	//    AbilityTags.HasTag("Ability.Attack") 匹配，可能会先找到 GA_RangeAttack（Active=0），
+	//    而错过了正在运行的 BP_GA_AlexAttack（Active=1）。这会导致：
+	//    - 误判为"没有激活的能力"，从而创建新的 Ability 实例
+	//    - 连击系统（Combo System）被重置，表现为攻击永远从第一段开始
+	//    - 或者表现为"卡在第二段无法继续"（因为新实例的 bComboWindowOpen 状态独立）
+	//
+	// 3. 状态污染：
+	//    GA_RangeAttack 通常设计为 InstancedPerExecution（瞬发即结束），
+	//    而 BP_GA_AlexAttack 设计为 InstancedPerActor（保持状态）。
+	//    两者在 ASC 中并存时，InputPressed 事件可能被错误地路由到 RangeAttack 实例。
+	//
+	// 【正确做法】
+	// 应将 GA_RangeAttack 纳入 FormAbilitySets 管理：
+	//   - 创建 DA_RangedForm AbilitySet 包含 GA_RangeAttack
+	//   - 在装备远程武器时调用 SwitchToForm(RangedFormTag)
+	//   - 这样切换形态时会自动清理近战能力，授予远程能力，反之亦然
+	//
+	// 【当前规避方案】
+	// 由于目前采用硬编码授予，ATTACK() 函数中必须使用 IsA(UGA_AlexAttack::StaticClass())
+	// 进行类名精确匹配，而不能仅依赖 GameplayTag 匹配，以排除 GA_RangeAttack 的干扰。
+	// ============================================================================
+	FGameplayAbilitySpec RangeAttackSpec(UGA_RangeAttack::StaticClass(), 1, INDEX_NONE, this);
+    AbilitySystemComponent->GiveAbility(RangeAttackSpec);
 }
 
 void AAlexCharacter::SaveGame()
@@ -886,6 +1051,14 @@ void AAlexCharacter::SwitchToForm(FGameplayTag NewFormTag)
 	// 2. 移除当前形态的所有技能
 	if (UAbilitySet* CurrentSet = FormAbilitySets.FindRef(CurrentFormTag))
 	{
+		//CurrentSet->RemoveFromAbilitySystem(AbilitySystemComponent, CurrentFormAbilityHandles);
+		for (const FGameplayAbilitySpecHandle& Handle : CurrentFormAbilityHandles)
+		{
+		    if (AbilitySystemComponent->FindAbilitySpecFromHandle(Handle))
+		    {
+		        AbilitySystemComponent->CancelAbilityHandle(Handle);  // 强制取消
+		    }
+		}
 		CurrentSet->RemoveFromAbilitySystem(AbilitySystemComponent, CurrentFormAbilityHandles);
 	}
 	CurrentFormAbilityHandles.Empty();
@@ -960,40 +1133,6 @@ void AAlexCharacter::PlaySurfaceSound(ECharacterSoundType SoundType, FName Surfa
     {
         UGameplayStatics::PlaySoundAtLocation(this, SoundToPlay, GetActorLocation());
     }
-
-	//FVector Start = GetActorLocation();
- //   FVector End = Start - FVector(0, 0, 100);
-
-	//DrawDebugLine(GetWorld(), Start, End, FColor::Red, false, -1, 0, 3.f);
-
-	//FHitResult Hit;
- //   FCollisionQueryParams Params;
- //   Params.AddIgnoredActor(this);
-
-	//if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
-	//{
-	//	if (AActor* HitActor = Hit.GetActor())
-	//	{
-	//		// 遍历配置的Tag-Sound映射，找到匹配就播放
-	//		for (const auto& Pair : FootstepSounds)
-	//		{
-	//			if (HitActor->ActorHasTag(Pair.Key))
-	//			{
-	//				if (Pair.Value)
-	//				{
-	//					UGameplayStatics::PlaySoundAtLocation(this, Pair.Value, Hit.ImpactPoint);
-	//				}
-	//				return;
-	//			}
-	//		}
-
-	//		// 没有匹配到特定Tag，播放默认
-	//		if (DefaultFootstepSound)
-	//		{
-	//			UGameplayStatics::PlaySoundAtLocation(this, DefaultFootstepSound, Hit.ImpactPoint);
-	//		}
-	//	}
-	//}
 }
 
 void AAlexCharacter::UpdateLockOnUI()
@@ -1533,6 +1672,12 @@ void AAlexCharacter::OnWallRunBackFlipEnded(UAnimMontage* Montage, bool bInterru
 {
 	ActionState = EActionState::EAS_Unoccupied;
 
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->RemoveLooseGameplayTag(
+			FGameplayTag::RequestGameplayTag(FName("State.WallRunning")));
+	}
+
 	// 恢复重力设置
 	GetCharacterMovement()->GravityScale = PreWallRunGravityScale;
 	GetCharacterMovement()->bOrientRotationToMovement = true;
@@ -1548,6 +1693,8 @@ void AAlexCharacter::OnWallRunBackFlipEnded(UAnimMontage* Montage, bool bInterru
 
 	LastMovementInput = FVector2D::ZeroVector;
 	bHasMovementInput = false;
+
+	if (AttributeSet) AttributeSet->SetDashCharges(AttributeSet->GetMaxDashCharges());
 }
 
 void AAlexCharacter::StartWallRun()

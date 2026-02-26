@@ -69,7 +69,7 @@ protected:
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> MontageTask;
 	TObjectPtr<UAbilityTask_WaitGameplayEvent> DamageEventTask;
 	TObjectPtr<UAbilityTask_WaitGameplayEvent> ComboWindowEventTask;
-	TObjectPtr<UAbilityTask_WaitInputPress> InputPressTask;
+	TObjectPtr<UAbilityTask_WaitGameplayEvent> CloseWindowEventTask;
 
 	// 函数
 	void PlayCurrentComboSection();       // 播放当前段动画
@@ -93,6 +93,9 @@ protected:
 
 	UFUNCTION()
 	void OnComboWindowEventReceived(FGameplayEventData EventData);
+
+	UFUNCTION()
+    void OnCloseComboWindowEventReceived(FGameplayEventData EventData);
 
 	UFUNCTION()
 	void OnInputPressed(float TimeWaited);

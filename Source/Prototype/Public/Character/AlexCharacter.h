@@ -32,6 +32,7 @@ class AWeaponActor;
 class UFormWheelWidget;
 class UProgressBar;
 class AEnemy;
+class UAmmoWidget;
 
 USTRUCT(BlueprintType)
 struct FMorphConfig
@@ -93,6 +94,10 @@ struct FSurfaceSoundSet
     USoundBase* DefaultSound;  // 默认
 };
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnReserveAmmoChanged, int32, NewReserve, int32, MaxReserve);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHeldWeaponChanged, AWeaponActor*, NewWeapon, AWeaponActor*, OldWeapon);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterDeath, AActor*, Victim);
+
 UCLASS()
 class PROTOTYPE_API AAlexCharacter : public ABaseCharacter, public IPickupInterface, public IAbilitySystemInterface  
 {
@@ -123,18 +128,34 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "WallRun")
 	void BP_OnStartWallRun();
 
+	// 获取墙跑状态（用于AnimInstance）
+	UFUNCTION(BlueprintCallable)
+	bool GetbIsWallRunning()const { return bIsWallRunning; }
+
+	// 获取玩家锁定目标（用于敌人死亡解锁）
+	UFUNCTION(BlueprintCallable, Category="LockOn")
+	AActor* GetLockedTarget() const { return LockedTarget; }
+
 	// 获取当前形态配置
 	const FMorphConfig& GetCurrentMorphConfig() const;
 
 	// 连击管理（给GA）
     UFUNCTION(BlueprintCallable, Category="Combat")
-    void ResetAttackCombo() { CurrentComboStep = 0; }
+	void ResetAttackCombo() {
+		CurrentComboStep = 0;
+		SetComboWindowOpen(false); 
+		UE_LOG(LogTemp, Warning, TEXT(">>> Combo Reset"));
+	}
     
     UFUNCTION(BlueprintCallable, Category="Combat")
-    void AdvanceAttackCombo() { CurrentComboStep++; }
+	void AdvanceAttackCombo() {
+		CurrentComboStep++;
+		UE_LOG(LogTemp, Warning, TEXT("CurrentComboStep: %d"), CurrentComboStep);
+	}
     
     UFUNCTION(BlueprintCallable, Category="Combat")
     int32 GetAttackComboStep() const { return CurrentComboStep; }
+
 
 	// 敌人注册/注销（只有看到玩家的敌人才会注册）
     UFUNCTION()
@@ -142,6 +163,59 @@ public:
     
     UFUNCTION()
     void UnregisterSuspicionSource(AEnemy* Enemy);
+
+	// 瞄准相关
+	UPROPERTY(BlueprintReadOnly, Category = "Aiming")
+	float CurrentAimPitch = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Aiming")  
+	float CurrentAimYaw = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Aiming")
+	FRotator CachedMuzzleRotation;
+
+	void UpdateAimingData();  // 计算瞄准数据
+
+	UFUNCTION()
+	float GetAimPitch() const { return CurrentAimPitch; }
+
+	UFUNCTION()
+	float GetAimYaw() const { return CurrentAimYaw; }
+
+	UFUNCTION()
+	AWeaponActor* GetHeldWeapon() const { return HeldWeapon; }
+
+    UPROPERTY(BlueprintAssignable, Category="Weapon|UI")
+    FOnReserveAmmoChanged OnReserveAmmoChanged;
+
+    UFUNCTION(BlueprintCallable, Category="Weapon|UI")
+    void GetAmmoDisplay(int32& OutCurrent, int32& OutReserve) const;
+
+	UPROPERTY(BlueprintAssignable, Category="Weapon|Events")
+    FOnHeldWeaponChanged OnHeldWeaponChanged;
+
+    // 设置当前武器（内部调用，会广播事件）
+    UFUNCTION(BlueprintCallable, Category="Weapon")
+    void SetHeldWeapon(AWeaponActor* NewWeapon);
+
+	UFUNCTION()
+	FRotator GetCachedMuzzleRotation() const { return CachedMuzzleRotation; }
+
+	UFUNCTION(BlueprintCallable, Category="LockOn")
+	void ConfirmLockOn();              // 松开 Tab 确认锁定
+
+	UFUNCTION(BlueprintCallable, Category="LockOn")
+	void CancelLockOn();               // 取消锁定
+
+	// 连击窗口
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Combat", meta=(AllowPrivateAccess="true"))
+	bool bComboWindowOpen = false;
+
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	bool IsComboWindowOpen() const { return bComboWindowOpen; }
+	
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	void SetComboWindowOpen(bool bOpen) { bComboWindowOpen = bOpen; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -158,6 +232,7 @@ protected:
 	void DASH();
 	void CLIMB();
 	void ATTACK();
+	void ATTACK_Released();
 	void TAB_Pressed();
 	void TAB_Released();
 	void PICKUP();
@@ -211,6 +286,14 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UFormWheelWidget> FormWheelWidget;
 
+	// AmmoWidgetClass
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
+	TSubclassOf<UAmmoWidget> AmmoWidgetClass;
+
+	// AmmoWidget实例
+	UPROPERTY()
+	TObjectPtr<UAmmoWidget> AmmoWidget;
+
 	// 警觉UI相关配置
 	// 当前正在观察玩家的敌人列表（自动去重）
     UPROPERTY()
@@ -255,7 +338,6 @@ protected:
 	void OnAbilityInputReleased(FGameplayTag InputTag);
 
 	// 死亡委托（给 UI 或 GameMode 监听）
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCharacterDeath, AActor*, Victim);
 	UPROPERTY(BlueprintAssignable)
 	FOnCharacterDeath OnCharacterDeath;
 
@@ -263,6 +345,9 @@ protected:
     virtual void PossessedBy(AController* NewController) override;
 
 private:
+	UPROPERTY(BlueprintReadOnly, Category="Input", meta = (AllowPrivateAccess = "true"))
+	bool bHasMovementInput = false;			// 是否有移动输入
+
 	/*
 	* 存档
 	*/
@@ -271,9 +356,6 @@ private:
 
 	UFUNCTION(BlueprintCallable, Category = "SaveGame")
 	void LoadGame();
-
-	UPROPERTY(BlueprintReadOnly, Category="Input", meta = (AllowPrivateAccess = "true"))
-	bool bHasMovementInput = false;			// 是否有移动输入
 
 	/*
 	* 形态轮盘相关
@@ -393,8 +475,6 @@ private:
 
 	// 核心逻辑
 	void UpdateTargetSelection();      // 按住 Tab 时每帧更新悬停目标
-	void ConfirmLockOn();              // 松开 Tab 确认锁定
-	void CancelLockOn();               // 再按 Tab 取消锁定
 	void UpdateLockOnCamera(float DeltaTime);  // 锁定时更新相机
 
 	/* 

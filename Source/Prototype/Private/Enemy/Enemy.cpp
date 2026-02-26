@@ -326,7 +326,7 @@ float AEnemy::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AC
 			//StartStun();
 		}
 	}
-return ActualDamage;
+	return ActualDamage;
 }
 
 void AEnemy::ShowHealthBar()
@@ -370,7 +370,16 @@ void AEnemy::OnHealthDepleted()
     if (AAlexCharacter* Player = Cast<AAlexCharacter>(GetPlayerActor()))
     {
         Player->UnregisterSuspicionSource(this);
+		if (Player->GetLockedTarget() == this)
+        {
+            Player->CancelLockOn();
+        }
     }
+
+	if (Weapon)
+	{
+		Weapon->Drop(GetActorLocation() + GetActorForwardVector() * 100.f);
+	}
 
 	// ±ê¼ÇËÀÍö×´Ì¬
     CurrentAIState = EAIState::Dead;
@@ -381,7 +390,16 @@ void AEnemy::OnHealthDepleted()
 
 	GetWorldTimerManager().ClearTimer(HideHealthBarTimer);
 	HideHealthBar();
-	Destroy();
+
+	if (DeathMontage)
+	{
+		PlayAnimMontage(DeathMontage);
+		SetLifeSpan(3.0f);
+	}
+	else
+	{
+		SetLifeSpan(0.1f);
+	}
 }
 
 void AEnemy::OnSeePlayer(APawn* Pawn)

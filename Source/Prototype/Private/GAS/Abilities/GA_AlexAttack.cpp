@@ -9,6 +9,7 @@
 #include "AbilitySystemComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Items/WeaponActor.h"
 
 UGA_AlexAttack::UGA_AlexAttack()
 {
@@ -47,10 +48,7 @@ void UGA_AlexAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 		return;
 	}
 
-	UAnimInstance* Instance = AlexChar->GetMesh()->GetAnimInstance();
-	UAnimMontage* Montage = AlexChar->GetCurrentMorphConfig().ComboMontage;
-
-	if (Instance && Montage && Instance->Montage_IsPlaying(Montage))
+	if (AlexChar->IsComboWindowOpen())
 	{
 		const FMorphConfig& Config = AlexChar->GetCurrentMorphConfig();
 		int32 CurrentComboStep = AlexChar->GetAttackComboStep();
@@ -58,12 +56,19 @@ void UGA_AlexAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 		if (Config.LightComboSections.IsValidIndex(NextStep))
 		{
 			// 有下一段，尝试推进连击
+			AlexChar->SetComboWindowOpen(false);
             TryAdvanceCombo();
+			return;
+		}
+		else
+		{
+			EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+			return;
 		}
 	}
 	else
 	{
-		// 没播放 → 新攻击，重置 Step 为 0
+		// 不在窗口期 → 新攻击序列，重置连击
         AlexChar->ResetAttackCombo();
         PlayCurrentComboSection();
 	}
@@ -99,6 +104,12 @@ void UGA_AlexAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const F
         ComboWindowEventTask->ExternalCancel();
         ComboWindowEventTask = nullptr;
     }
+	if (CloseWindowEventTask)
+    {
+        CloseWindowEventTask->EventReceived.RemoveAll(this);
+        CloseWindowEventTask->ExternalCancel();
+        CloseWindowEventTask = nullptr;
+    }
 	if (AlexChar && !bIsAdvancingCombo)
     {
         AlexChar->ResetAttackCombo();
@@ -119,8 +130,13 @@ void UGA_AlexAttack::InputPressed(const FGameplayAbilitySpecHandle Handle, const
 {
 	Super::InputPressed(Handle, ActorInfo, ActivationInfo);
 
-	// 如果已经在窗口期内，不需要处理（WaitInputPress Task 会接管）
-	if (bComboWindowOpen) return;
+	// 如果已经在窗口期内，直接触发连击！
+	if (bComboWindowOpen)
+	{
+		UE_LOG(LogTemp, Warning, TEXT(">>> InputPressed during window, advancing combo"));
+        TryAdvanceCombo();
+		return;
+	}
 
 	// 如果 Ability 没激活，不处理
 	if (!IsActive()) return;
@@ -128,11 +144,11 @@ void UGA_AlexAttack::InputPressed(const FGameplayAbilitySpecHandle Handle, const
 	// 预输入缓冲：玩家按得稍微早一点，帮他存住
 	bInputBuffered = true;
 
-	// 0.15 秒后过期（如果这段时间内没开窗口，就丢弃这次输入）
+	// 0.3 秒后过期（如果这段时间内没开窗口，就丢弃这次输入）
 	GetWorld()->GetTimerManager().SetTimer(
 		InputBufferTimer,
 		[this]() { bInputBuffered = false; },
-		0.15f,
+		0.3f,
 		false
 	);
 }
@@ -140,6 +156,11 @@ void UGA_AlexAttack::InputPressed(const FGameplayAbilitySpecHandle Handle, const
 void UGA_AlexAttack::PlayCurrentComboSection()
 {
 	if (!AlexChar)return;
+
+	UE_LOG(LogTemp, Error, TEXT(">>> PlayCombo | Montage: %s | Sections: %d | CurrentStep: %d"),
+        *GetNameSafe(AlexChar->GetCurrentMorphConfig().ComboMontage),
+        AlexChar->GetCurrentMorphConfig().LightComboSections.Num(),
+        AlexChar->GetAttackComboStep());
 
 	// 1. 清理旧 Task
 	if (MontageTask)
@@ -163,23 +184,47 @@ void UGA_AlexAttack::PlayCurrentComboSection()
         ComboWindowEventTask->ExternalCancel();
         ComboWindowEventTask = nullptr;
     }
+	if (CloseWindowEventTask)
+	{
+		CloseWindowEventTask->EventReceived.RemoveAll(this);
+		CloseWindowEventTask->ExternalCancel();
+		CloseWindowEventTask = nullptr;
+	}
 
 	// 2. 获取当前形态配置
 	const FMorphConfig& Config = AlexChar->GetCurrentMorphConfig();
 	if (!Config.ComboMontage || Config.LightComboSections.Num() == 0)
 	{
+		UE_LOG(LogTemp, Error, TEXT(">>> PlayCombo FAILED: ComboMontage is NULL!"));
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 		return;
 	}
 	int32 CurrentStep = AlexChar->GetAttackComboStep();
 	if (!Config.LightComboSections.IsValidIndex(CurrentStep))
 	{
+		UE_LOG(LogTemp, Error, TEXT(">>> PlayCombo FAILED: Invalid Step %d, ArrayNum: %d"), 
+            CurrentStep, Config.LightComboSections.Num());
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
 		return;
 	}
 
 	// 3. 获取当前段名（如 "Jab1", "Jab2"）
 	FName SectionName = Config.LightComboSections[CurrentStep];
+	UE_LOG(LogTemp, Error, TEXT(">>> PlayCombo | Step: %d | SectionName: %s"), 
+        CurrentStep, *SectionName.ToString());
+	if (!Config.ComboMontage->IsValidSectionName(SectionName))
+    {
+        UE_LOG(LogTemp, Error, TEXT(">>> PlayCombo FAILED: Section '%s' NOT FOUND in Montage '%s'!"), 
+            *SectionName.ToString(), *Config.ComboMontage->GetName());
+        // 列出所有可用 Section 供你核对
+        for (int32 i = 0; i < Config.ComboMontage->CompositeSections.Num(); i++)
+        {
+            UE_LOG(LogTemp, Warning, TEXT(">>> Available Section[%d]: %s"), 
+                i, *Config.ComboMontage->CompositeSections[i].SectionName.ToString());
+        }
+        EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+        return;
+    }
 
 	// 4. 创建 MontageTask 播放动画
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
@@ -213,6 +258,14 @@ void UGA_AlexAttack::PlayCurrentComboSection()
 	);
 	ComboWindowEventTask->EventReceived.AddDynamic(this, &UGA_AlexAttack::OnComboWindowEventReceived);
 	ComboWindowEventTask->ReadyForActivation();
+
+	// 8. 创建 CloseWindowEventTask 监听窗口关闭
+    CloseWindowEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
+        this,
+        FGameplayTag::RequestGameplayTag(FName("Event.CloseComboWindow"))
+    );
+    CloseWindowEventTask->EventReceived.AddDynamic(this, &UGA_AlexAttack::OnCloseComboWindowEventReceived);
+    CloseWindowEventTask->ReadyForActivation();
 }
 
 void UGA_AlexAttack::OpenComboWindow()
@@ -221,11 +274,16 @@ void UGA_AlexAttack::OpenComboWindow()
 	if (!IsActive()) return;
 
 	// 2. 标记窗口开启（给 InputPressed 虚函数检查用）
+	if (AlexChar) AlexChar->SetComboWindowOpen(true);
 	bComboWindowOpen = true;
+
+	UE_LOG(LogTemp, Warning, TEXT(">>> OpenComboWindow | bInputBuffered: %s"), bInputBuffered ? TEXT("TRUE") : TEXT("FALSE"));
 
 	// 如果有预输入，立即触发连击，不创建 Task 监听
 	if (bInputBuffered)
 	{
+		UE_LOG(LogTemp, Warning, TEXT(">>> Processing buffered input"));
+
 		bInputBuffered = false;
 		if (InputBufferTimer.IsValid())
 		{
@@ -239,40 +297,18 @@ void UGA_AlexAttack::OpenComboWindow()
 		{
 			// 能连击，TryAdvanceCombo 会处理 CloseComboWindow
 			TryAdvanceCombo();
+			UE_LOG(LogTemp, Warning, TEXT(">>> Buffered input processed, TryAdvanceCombo called"));
+			return;
 		}
-		else
-		{
-			// 不能连击（最后一段），重置窗口状态，让动画自然结束
-			bComboWindowOpen = false;
-		}
-		return;
+		UE_LOG(LogTemp, Warning, TEXT(">>> No next step, continuing to create InputPressTask"));
 	}
-
-	// 3. 创建输入监听 Task：监听玩家按下攻击键
-	// 参数 false 表示"不消耗输入事件"（允许其他系统也收到）
-	InputPressTask = UAbilityTask_WaitInputPress::WaitInputPress(this, false);
-	InputPressTask->OnPress.AddDynamic(this, &UGA_AlexAttack::OnInputPressed);
-	InputPressTask->ReadyForActivation();
-
-	// 4. 启动 0.5 秒定时器：超时自动关闭窗口（玩家没按键）
-	GetWorld()->GetTimerManager().SetTimer(
-        ComboWindowTimer,           // 成员变量 FTimerHandle
-        this,                       // 回调对象
-        &UGA_AlexAttack::CloseComboWindow,  // 超时回调
-        0.5f,                       // 窗口期持续时间（秒）
-        false                       // 不循环，只执行一次
-    );
+	UE_LOG(LogTemp, Warning, TEXT(">>> Window open, waiting for InputPressed"));
 }
 
 void UGA_AlexAttack::CloseComboWindow()
 {
+	if (AlexChar) AlexChar->SetComboWindowOpen(false);
 	bComboWindowOpen = false;
-
-	if (InputPressTask)
-	{
-		InputPressTask->ExternalCancel();
-		InputPressTask = nullptr;
-	}
 
 	if (ComboWindowTimer.IsValid())
 	{
@@ -336,10 +372,12 @@ void UGA_AlexAttack::PerformDamageCheck()
 	// 4. 处理命中
 	if (bHit)
 	{
+		int32 i = 0;
 		for (auto& Hit : HitResults)
 		{
 			AActor* HitActor = Hit.GetActor();
 			if (!HitActor || HitActor == AlexChar) continue;
+			if (HitActor->IsA(AWeaponActor::StaticClass())) continue;// 忽略武器
 
 			// 5. 扇形角度检查（只打前方的敌人）
 			FVector ToTarget = (HitActor->GetActorLocation() - AlexChar->GetActorLocation()).GetSafeNormal();
@@ -350,7 +388,7 @@ void UGA_AlexAttack::PerformDamageCheck()
 			if (AngleDeg <= HalfAngle)
 			{
 				// 6. 应用伤害
-				UGameplayStatics::ApplyDamage(
+				float ActualDamage = UGameplayStatics::ApplyDamage(
 					HitActor,
 					Config.Damage,
 					AlexChar->GetController(),
@@ -395,7 +433,7 @@ void UGA_AlexAttack::OnMontageBlendOut()
         int32 NextStep = AlexChar->GetAttackComboStep() + 1;
 		bool bHasNext = Config.LightComboSections.IsValidIndex(NextStep);
 		// 有下一段且窗口开着 → 继续等输入
-        if (bHasNext && bComboWindowOpen) return;
+        if (bHasNext) return;
 		// 否则（无下一段 或 窗口已关）→ 结束
 	}
 
@@ -419,6 +457,14 @@ void UGA_AlexAttack::OnDamageEventReceived(FGameplayEventData EventData)
 void UGA_AlexAttack::OnComboWindowEventReceived(FGameplayEventData EventData)
 {
 	if (IsActive()) OpenComboWindow();
+}
+
+void UGA_AlexAttack::OnCloseComboWindowEventReceived(FGameplayEventData EventData)
+{
+	if (bComboWindowOpen && !bIsAdvancingCombo)  // 如果没在衔接中，就关闭
+    {
+        CloseComboWindow();
+    }
 }
 
 void UGA_AlexAttack::OnInputPressed(float TimeWaited)

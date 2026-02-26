@@ -7,7 +7,7 @@
 
 void UAnimNotify_MeleeDamageEvent::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation)
 {
-	if (!MeshComp) return;
+    if (!MeshComp) return;
 
 	if (AActor* Owner = MeshComp->GetOwner())
     {
@@ -16,7 +16,7 @@ void UAnimNotify_MeleeDamageEvent::Notify(USkeletalMeshComponent* MeshComp, UAni
             FGameplayEventData EventData;
             EventData.Instigator = Owner;
             EventData.Target = Owner;
-            
+         
             ASC->HandleGameplayEvent(
                 FGameplayTag::RequestGameplayTag(FName("Event.MeleeDamage")),
                 &EventData

@@ -53,4 +53,10 @@ public:
 
 	UPROPERTY(BlueprintReadOnly)
 	bool bIsHoldingGun = false;  // 是否持枪
+
+	UPROPERTY(BlueprintReadOnly)
+	float AimPitch = 0.f;  // 视角俯仰角度
+
+	UPROPERTY(BlueprintReadOnly)
+	float AimYaw = 0.f;  // 视角偏航角度
 };

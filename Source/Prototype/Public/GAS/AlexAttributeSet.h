@@ -50,9 +50,21 @@ public:
     FGameplayAttributeData MaxDashCharges;
     ATTRIBUTE_ACCESSORS(UAlexAttributeSet, MaxDashCharges)
 
+    // 弹药
+	UPROPERTY(BlueprintReadOnly, Category="Attributes", ReplicatedUsing=OnRep_AmmoBullet)
+	FGameplayAttributeData Ammo_Bullet;
+    ATTRIBUTE_ACCESSORS(UAlexAttributeSet, Ammo_Bullet)
+
+	UPROPERTY(BlueprintReadOnly, Category="Attributes", ReplicatedUsing=OnRep_AmmoRocket)
+	FGameplayAttributeData Ammo_Rocket;
+	ATTRIBUTE_ACCESSORS(UAlexAttributeSet, Ammo_Rocket)
+
     // 委托（用于UI绑定）
     FSimpleDelegate OnHealthChanged;
     FSimpleDelegate OnManaChanged;
+    FSimpleDelegate OnAmmoBulletChanged;
+    FSimpleDelegate OnAmmoRocketChanged;
+
 
 protected:
     // 回调函数（用于调试）
@@ -76,9 +88,18 @@ protected:
     
     UFUNCTION()
     void OnRep_MaxDashCharges(const FGameplayAttributeData& OldValue) const;
+
+    UFUNCTION()
+    void OnRep_AmmoBullet(const FGameplayAttributeData& OldValue) const;
+
+    UFUNCTION()
+    void OnRep_AmmoRocket(const FGameplayAttributeData& OldValue) const;
     
     // 服务器端验证，防止数据异常
     virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	// 添加 PostGameplayEffectExecute 声明（用于同步到 Weapon）
+    virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 };
