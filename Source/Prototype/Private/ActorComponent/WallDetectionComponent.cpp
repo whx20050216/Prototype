@@ -43,10 +43,22 @@ void UWallDetectionComponent::UpdateDetection()
 
 	if ((bBottom && !bMiddle && !bTop) || (bBottom && bMiddle && !bTop) || (!bBottom && bMiddle && !bTop))
 	{
-		DetectionResult = EDetectionResult::VaultPossible;
+		FVector HitNormal = bBottom ? BottomHit.ImpactNormal : MiddleHit.ImpactNormal;
+        float NormalZ = FMath::Abs(HitNormal.Z);
+        
+        // 法线Z < 0.5（约60度以上陡度）才算Vault，否则是斜坡让CMC自己爬
+        if (NormalZ < 0.5f)
+        {
+            DetectionResult = EDetectionResult::VaultPossible;
+            bCanVault = true;
+            UpToDownTrace(); // 仍然调用，用于计算Vault高度（选动画用），但不作为触发条件
+            return;
+        }
+
+		/*DetectionResult = EDetectionResult::VaultPossible;
 		bCanVault = true;
 		UpToDownTrace();
-		return;
+		return;*/
 	}
 
 	if (bBottom || bMiddle || bTop)

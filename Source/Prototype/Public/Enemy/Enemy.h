@@ -169,6 +169,13 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	//  ‹ª˜
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Hit")
+	TArray<UAnimMontage*> HitReactMontages;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Combat|Hit")
+	float HitStunDuration = 0.5f;
+
 	// Œ‰∆˜≈‰÷√
 	UPROPERTY(VisibleAnywhere, Category = "Combat")
 	TObjectPtr<AWeaponActor> Weapon;

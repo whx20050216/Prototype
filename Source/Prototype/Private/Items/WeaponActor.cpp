@@ -108,7 +108,7 @@ void AWeaponActor::EquipTo(ABaseCharacter* Character)
 	// 3. 附加到右手（保持当前世界变换，避免瞬移）
 	//FVector OriginalScale = ItemMesh->GetRelativeScale3D();
 	FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, true);
-    AttachToComponent(Character->GetMesh(), AttachRules, FName("hand_r"));
+    AttachToComponent(Character->GetMesh(), AttachRules, FName("hand_r2"));
 	//ItemMesh->SetRelativeScale3D(OriginalScale);
 	// 4. 确保可见
     SetActorHiddenInGame(false);

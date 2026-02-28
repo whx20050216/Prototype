@@ -15,6 +15,7 @@
 #include "Components/WidgetComponent.h"
 #include "Engine/OverlapResult.h"
 #include "Items/WeaponActor.h"
+#include "BrainComponent.h"
 
 AEnemy::AEnemy()
 {
@@ -54,15 +55,23 @@ void AEnemy::Tick(float DeltaTime)
 		UpdateSuspicion(DeltaTime);
 	}
 
-	// 只在远程攻击状态下更新Pitch（优化）
-    if (bIsAttacking && AttackConfigs[CurrentAttackIndex].Type != EAttackType::Melee)
+	if (AttackConfigs.IsValidIndex(CurrentAttackIndex) && 
+        AttackConfigs[CurrentAttackIndex].Type != EAttackType::Melee)
     {
-        UpdateAimingData();
+        if (CurrentAIState == EAIState::Alert && 
+            GetDistanceToPlayer() <= GetAttackRange())
+        {
+            // 在范围内：进入/保持 Fire 动画
+            bIsAiming = true;
+            UpdateAimingData();
+        }
+        else
+        {
+            // 超出范围（追击中）：退出 Fire 动画，回到 WalkRun
+            bIsAiming = false;
+            CurrentAimPitch = FMath::FInterpTo(CurrentAimPitch, 0.f, DeltaTime, 5.f);
+        }
     }
-	else
-	{
-		CurrentAimPitch = FMath::FInterpTo(CurrentAimPitch, 0.f, DeltaTime, 5.f);
-	}
 }
 
 void AEnemy::ExecuteAttack()
@@ -116,6 +125,7 @@ void AEnemy::CancelAttack()
 	if (bIsAttacking)
 	{
 		bIsAttacking = false;
+		bIsAiming = false;
 		GetWorld()->GetTimerManager().ClearTimer(AttackCooldownTimer);
 		if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
         {
@@ -288,7 +298,7 @@ void AEnemy::EnterAlertState()
 	const FAttackConfig& Config = AttackConfigs[CurrentAttackIndex];
 	if (Config.Type != EAttackType::Melee)
 	{
-		bIsAiming = true;
+		//bIsAiming = true;
 		PlayAnimation(Config.Animation.Montage, Config.Animation.SectionName, Config.Animation.PlayRate);
 	}
 }
@@ -323,8 +333,78 @@ float AEnemy::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AC
 		AttributeComp->ApplyHealthChange(-ActualDamage);
 		if (!AttributeComp->IsDead())
 		{
-			//StartStun();
+			// 1. 打断当前攻击
+			CancelAttack();
+
+			// 2. 播放受击动画（随机选一个，或根据伤害方向选）
+			if (HitReactMontages.Num() > 0 && GetMesh()->GetAnimInstance())
+			{
+				// 检查是否已经在播放受击（防止被连击时鬼畜）
+				bool bAlreadyHit = false;
+				for (auto* Montage : HitReactMontages)
+				{
+					if (GetMesh()->GetAnimInstance()->Montage_IsPlaying(Montage))
+                    {
+                        bAlreadyHit = true;
+                        break;
+                    }
+				}
+
+				if (!bAlreadyHit)
+				{
+					int32 RandIndex = FMath::RandRange(0, HitReactMontages.Num() - 1);
+                    UAnimMontage* HitMontage = HitReactMontages[RandIndex];
+					if (HitMontage)
+					{
+						PlayAnimMontage(HitMontage);
+						// 停止行为树
+						if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+                        {
+                            AIController->StopMovement();
+                            if (AIController->GetBrainComponent())
+                            {
+                                AIController->GetBrainComponent()->PauseLogic("HitReact");
+                            }
+                        }
+
+						// 动画播完恢复行为树
+						FTimerHandle ResumeHandle;
+                        GetWorldTimerManager().SetTimer(
+                            ResumeHandle,
+                            [this]()
+                            {
+								if (!IsValid(this)) return;
+								if (CurrentAIState == EAIState::Dead) return;
+
+                                if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+                                {
+                                    if (AIController->GetBrainComponent())
+                                    {
+                                        AIController->GetBrainComponent()->ResumeLogic("HitReact");
+                                    }
+                                }
+                            },
+                            HitStunDuration,
+                            false
+                        );
+					}
+				}
+			}
 		}
+		if (CurrentAIState != EAIState::Alert && CurrentAIState != EAIState::Dead)
+        {
+            // 立即转向攻击者方向（给玩家明显的反馈）
+            if (DamageCauser)
+            {
+                FVector ToAttacker = (DamageCauser->GetActorLocation() - GetActorLocation()).GetSafeNormal();
+                FRotator LookAtRot = ToAttacker.Rotation();
+                LookAtRot.Pitch = 0.f; // 保持水平，不仰头低头
+                SetActorRotation(LookAtRot);
+            }
+            
+            // 进入 Alert（这会自动设置 TargetPlayer、广播给附近敌人、切换行为树）
+            EnterAlertState();
+        }
 	}
 	return ActualDamage;
 }
@@ -381,6 +461,7 @@ void AEnemy::OnHealthDepleted()
 		Weapon->Drop(GetActorLocation() + GetActorForwardVector() * 100.f);
 	}
 
+	GetWorldTimerManager().ClearAllTimersForObject(this);
 	// 标记死亡状态
     CurrentAIState = EAIState::Dead;
 	if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))

@@ -217,6 +217,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void SetComboWindowOpen(bool bOpen) { bComboWindowOpen = bOpen; }
 
+	// 禁止移动（供攻击GA调用）
+	UFUNCTION(BlueprintCallable, Category="Movement")
+    void SetMovementLock(bool bLocked) { bLockMove = bLocked; }
+
 protected:
 	virtual void BeginPlay() override;
 

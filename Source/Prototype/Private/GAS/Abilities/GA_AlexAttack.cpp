@@ -48,6 +48,12 @@ void UGA_AlexAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle, co
 		return;
 	}
 
+	if (AlexChar)
+	{
+		AlexChar->SetMovementLock(true);
+		AlexChar->GetCharacterMovement()->StopMovementImmediately();
+	}
+
 	if (AlexChar->IsComboWindowOpen())
 	{
 		const FMorphConfig& Config = AlexChar->GetCurrentMorphConfig();
@@ -121,6 +127,11 @@ void UGA_AlexAttack::EndAbility(const FGameplayAbilitySpecHandle Handle, const F
     bComboWindowOpen = false;
     bIsAdvancingCombo = false;
     bInputBuffered = false;
+
+	if (AlexChar)
+	{
+		AlexChar->SetMovementLock(false);
+	}
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 	bIsEndingAbility = false;

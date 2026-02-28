@@ -1368,6 +1368,13 @@ void AAlexCharacter::UpdateTargetSelection()
 		{
 			if (Hit.GetActor() && Hit.GetActor()->Implements<UTargetableInterface>())
 			{
+				if (AEnemy* Enemy = Cast<AEnemy>(Hit.GetActor()))
+				{
+				    if (Enemy->GetCurrentAIState() == EAIState::Dead)
+				    {
+				        continue;  // 跳过尸体
+				    }
+				}
 				float Priority = ITargetableInterface::Execute_GetLockPriority(Hit.GetActor());
 				if (Priority > 0.f)
 				{
@@ -1877,6 +1884,23 @@ void AAlexCharacter::UpdateWallRun(float DeltaTime)
 		if (!WallRunDirection.IsNearlyZero())
 		{
 			GetCharacterMovement()->Velocity = WallRunDirection * WallRunSpeed;
+
+			if (WallDetection && WallDetection->GetMiddleHit().bBlockingHit)
+			{
+			    FVector WallNormal = WallDetection->GetMiddleHit().ImpactNormal;
+			    
+			    // 目标朝向：面朝墙面（-WallNormal），保持水平
+			    FVector TargetForward = -WallNormal;
+			    TargetForward.Z = 0.f; // 强制水平，不仰头低头
+			    TargetForward.Normalize();
+			    
+			    FRotator TargetRot = TargetForward.Rotation();
+			    TargetRot.Pitch = 0.f; // 锁定俯仰
+			    TargetRot.Roll = 0.f;  // 锁定倾斜
+			    
+			    // 平滑插值（避免瞬转）
+			    SetActorRotation(FMath::RInterpTo(GetActorRotation(), TargetRot, DeltaTime, 10.0f));
+			}
 		}
 	}
 	else
@@ -2028,6 +2052,22 @@ void AAlexCharacter::UpdateClimb(float DeltaTime)
 		{
 			AnimInst->ClimbHorizontal = LastMovementInput.X;
 			AnimInst->ClimbVertical = LastMovementInput.Y;
+		}
+		if (WallDetection && WallDetection->GetMiddleHit().bBlockingHit)
+		{
+		    FVector WallNormal = WallDetection->GetMiddleHit().ImpactNormal;
+		    
+		    // 目标朝向：面朝墙面（-WallNormal），保持水平
+		    FVector TargetForward = -WallNormal;
+		    TargetForward.Z = 0.f; // 强制水平，不仰头低头
+		    TargetForward.Normalize();
+		    
+		    FRotator TargetRot = TargetForward.Rotation();
+		    TargetRot.Pitch = 0.f; // 锁定俯仰
+		    TargetRot.Roll = 0.f;  // 锁定倾斜
+		    
+		    // 平滑插值（避免瞬转）
+		    SetActorRotation(FMath::RInterpTo(GetActorRotation(), TargetRot, DeltaTime, 10.0f));
 		}
 	}
 	else
