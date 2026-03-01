@@ -3,6 +3,7 @@ UENUM(BlueprintType)//角色动作状态枚举
 enum class EActionState : uint8
 {
 	EAS_Walk UMETA(DisplayName = "Walk"),
+	EAS_Crouch UMETA(DisplayName = "Crouch"),
 	EAS_Run UMETA(DisplayName = "Run"),
 	EAS_Vaulting UMETA(DisplayName = "Vaulting"),
 	EAS_WallRunFlipping UMETA(DisplayName = "WallRunFlipping"),

@@ -133,6 +133,12 @@ void AAlexCharacter::Tick(float DeltaTime)
 	{
 		UpdateAimingData();
 	}
+
+	// 暗杀保险：如果目标死亡或无效，强制结束
+    if (bIsAssassinating && !IsValid(AssassinationTarget))
+    {
+        EndAssassinate();
+    }
 }
 
 void AAlexCharacter::ResetRun()
@@ -177,6 +183,8 @@ void AAlexCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		EnhancedInputComponent->BindAction(PickupAction, ETriggerEvent::Started, this, &AAlexCharacter::PICKUP);
 		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AAlexCharacter::ATTACK);
 		EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Completed, this, &AAlexCharacter::ATTACK_Released);
+		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &AAlexCharacter::Crouch);
+		EnhancedInputComponent->BindAction(AssassinateAction, ETriggerEvent::Started, this, &AAlexCharacter::OnAssassinatePressed);
 
 		// === GAS Ability 输入改为通过 InputConfig 绑定 ===
 		if (InputConfig)
@@ -300,6 +308,7 @@ void AAlexCharacter::SetHeldWeapon(AWeaponActor* NewWeapon)
 
 void AAlexCharacter::OnDeath()
 {
+	if (bIsCrouching) ExitCrouch();
 	if (bIsDead) return;
 	bIsDead = true;
 
@@ -494,6 +503,7 @@ void AAlexCharacter::LOOK(const FInputActionValue& Value)
 void AAlexCharacter::JumpPressed()
 {
 	if (bIsRoofFlipping) return;
+	if (bIsCrouching) ExitCrouch();
 
 	// 如果正在滑翔，再次按下空格停止滑翔
     if (ActionState == EActionState::EAS_Gliding)
@@ -569,6 +579,7 @@ void AAlexCharacter::RUN()
 {
 	// 滑翔时禁用奔跑
     if (ActionState == EActionState::EAS_Gliding) return;
+	if (bIsCrouching) ExitCrouch();
 
 	if (!bRunActive)
 	{
@@ -742,6 +753,50 @@ void AAlexCharacter::PICKUP()
 			HeldWeapon = nullptr;
 		}
 	}
+}
+
+void AAlexCharacter::Crouch()
+{
+	if (bIsCrouching)
+	{
+		ExitCrouch();
+		return;
+	}
+	if (!CanEnterCrouch()) return;
+
+	bIsCrouching = true;
+	PreCrouchWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = CrouchWalkSpeed;
+
+	if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))
+	{
+		AnimInst->bIsCrouching = true;
+	}
+}
+
+void AAlexCharacter::OnAssassinatePressed()
+{
+	if (bIsAssassinating || !bIsCrouching || bIsDead) return;
+	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("E Key Press")));
+	AEnemy* Target = nullptr;
+	if (LockedTarget)
+	{
+		Target = Cast<AEnemy>(LockedTarget);
+	}
+	else
+	{
+		Target = FindNearestAssassinationTarget();
+	}
+	if (!Target)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Target is null")));
+		return;
+	}
+	if (CanAssassinate(Target))
+    {
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Assassinate")));
+        StartAssassinate(Target);
+    }
 }
 
 void AAlexCharacter::UpdateSuspicionUI()
@@ -947,6 +1002,194 @@ void AAlexCharacter::LoadGame()
 	{
 		UE_LOG(LogTemp, Warning, TEXT(">>> No Save Found"));
 	}
+}
+
+bool AAlexCharacter::CanEnterCrouch() const
+{
+	if (IsDead() || bIsAssassinating) return false;
+
+	if (!GetCharacterMovement()->IsMovingOnGround()) return false;
+
+	if (bRunActive) return false;
+
+	if (bIsVaulting || bIsWallRunning || bIsClimbing || bIsRoofFlipping) return false;
+
+	if (ActionState == EActionState::EAS_Gliding) return false;
+
+	if (bIsCharging || bIsSkidding) return false;
+
+	float CurrentSpeed = GetCharacterMovement()->Velocity.Size2D();
+    if (CurrentSpeed > 500.f) return false;
+
+	return true;
+}
+
+void AAlexCharacter::ExitCrouch()
+{
+	if (!bIsCrouching) return;
+
+	bIsCrouching = false;
+	GetCharacterMovement()->MaxWalkSpeed = PreCrouchWalkSpeed;
+
+	if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))
+    {
+        AnimInst->bIsCrouching = false;
+    }
+}
+
+AEnemy* AAlexCharacter::FindNearestAssassinationTarget()
+{
+	FVector Center = GetActorLocation();
+	float Radius = AssassinationRange;
+
+	TArray<FHitResult> HitResults;
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(this);
+
+	bool bHit = GetWorld()->SweepMultiByChannel(
+		HitResults,
+		Center,
+		Center,
+		FQuat::Identity,
+		ECC_Pawn,
+		FCollisionShape::MakeSphere(Radius),
+		Params
+	);
+
+	AEnemy* Nearest = nullptr;
+	float MinDist = MAX_FLT;	//float 类型的最大正值
+
+	for (const FHitResult& Hit : HitResults)
+	{
+		if (AEnemy* Enemy = Cast<AEnemy>(Hit.GetActor()))
+		{
+			float Dist = FVector::Dist(GetActorLocation(), Enemy->GetActorLocation());
+			bool bCan = CanAssassinate(Enemy);
+			if (Dist < MinDist && bCan)
+            {
+                MinDist = Dist;
+                Nearest = Enemy;
+            }
+		}
+	}
+
+	return Nearest;
+}
+
+bool AAlexCharacter::CanAssassinate(AEnemy* Target) const
+{
+	if (!IsValid(Target))
+	{
+		return false;
+	}
+
+	// 1. 敌人状态检查
+	EAIState EnemyState = Target->GetCurrentAIState();
+	if (Target->GetCurrentAIState() == EAIState::Dead)
+	{
+		return false;
+	}
+	if (Target->GetCurrentAIState() == EAIState::Alert)
+	{
+		return false;
+	}
+	// 2. 距离检查
+	float Dist = FVector::Dist(GetActorLocation(), Target->GetActorLocation());
+	if (Dist > AssassinationRange)
+	{
+		return false;
+	}
+	// 3. 角度检查
+	FVector ToTarget = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal();
+    FVector EnemyForward = Target->GetActorForwardVector();
+	// DotProduct < -0.7 表示夹角 > 135度（几乎在正背后）
+    float Dot = FVector::DotProduct(ToTarget, EnemyForward);
+	if (Dot < AssassinationAngleThreshold)
+	{
+		return false;  // 角度不够，太偏侧面/正面
+	}
+	// 4. 视线检查（防穿墙暗杀）
+	FHitResult Hit;
+    FVector Start = GetActorLocation() + FVector(0,0,50);  // 从腰部/头部高度
+    FVector End = Target->GetActorLocation() + FVector(0,0,50);
+    
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(this);
+    Params.AddIgnoredActor(Target);
+    
+    if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+    {
+        // 有遮挡物
+        return false;
+    }
+    UE_LOG(LogTemp, Warning, TEXT("CanAssassinate: SUCCESS"));
+    return true;
+}
+
+void AAlexCharacter::StartAssassinate(AEnemy* Target)
+{
+	if (!IsValid(Target)) return;
+
+	bIsAssassinating = true;
+    AssassinationTarget = Target;
+
+	// 1. 禁用输入（防止移动干扰位置对齐）
+    if (APlayerController* PC = Cast<APlayerController>(GetController()))
+    {
+        DisableInput(PC);
+    }
+	// 2. 计算目标位置：敌人正后方 100cm
+	FVector TargetPos = Target->GetActorLocation() - Target->GetActorForwardVector() * 100.f;
+	FVector DirToEnemy = (Target->GetActorLocation() - TargetPos).GetSafeNormal();
+	FRotator FaceEnemyRot = DirToEnemy.Rotation();  // 面朝敌人
+	FaceEnemyRot.Pitch = 0.f;
+	FaceEnemyRot.Roll = 0.f;
+	// 3. 移动到位
+    // 注意：需要确保CapsuleComponent的Mobility是Movable
+	SetActorLocation(TargetPos);
+    SetActorRotation(FaceEnemyRot);
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+	    PC->SetControlRotation(FaceEnemyRot);  // 同步控制器朝向，防止视角跳变
+	}
+	// 4. 通知敌人进入被暗杀状态
+	Target->EnterAssassination(this);
+	// 5. 播放动画
+	if (AssassinationMontage)
+	{
+		PlayAnimMontage(AssassinationMontage);
+		// 绑定结束委托
+        FOnMontageEnded EndDelegate;
+        EndDelegate.BindUObject(this, &AAlexCharacter::OnAssassinationMontageEnded);
+        GetMesh()->GetAnimInstance()->Montage_SetEndDelegate(EndDelegate, AssassinationMontage);
+	}
+	// 6. 播放敌人被暗杀动画
+	Target->PlayAssassinatedMontage();
+}
+
+void AAlexCharacter::EndAssassinate()
+{
+	if (!bIsAssassinating) return;
+
+	bIsAssassinating = false;
+	// 1. 恢复输入
+    if (APlayerController* PC = Cast<APlayerController>(GetController()))
+    {
+        EnableInput(PC);
+    }
+
+}
+
+void AAlexCharacter::OnAssassinationMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	EndAssassinate();
+}
+
+void AAlexCharacter::ExecuteAssassinationDamage()
+{
+	if (!IsValid(AssassinationTarget)) return;
+	// 立即杀死敌人（调用敌人的死亡流程）
+    AssassinationTarget->DieFromAssassination();
 }
 
 void AAlexCharacter::ShowMorphWheel()
@@ -1797,6 +2040,8 @@ void AAlexCharacter::StartWallRun()
 		StopGlide();
 	}
 
+	if (bIsCrouching) ExitCrouch();
+
 	// 如果从攀爬切换，先保存输入再停止攀爬
 	if (bIsClimbing)
 	{
@@ -1995,6 +2240,18 @@ void AAlexCharacter::StartClimb()
     }
 
 	if (bIsClimbing) return;
+
+	if (bIsCrouching)
+	{
+		if (FindNearestAssassinationTarget() != nullptr)
+		{
+			return;
+		}
+		else
+		{
+			ExitCrouch();
+		}
+	}
 
 	if (AbilitySystemComponent)
     {

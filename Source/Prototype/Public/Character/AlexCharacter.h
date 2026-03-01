@@ -256,6 +256,8 @@ protected:
 	void TAB_Pressed();
 	void TAB_Released();
 	void PICKUP();
+	void Crouch();
+	void OnAssassinatePressed();
 
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
@@ -292,6 +294,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Death")
     UAnimMontage* DeathMontage;			// 死亡动作
+
+	UPROPERTY(EditDefaultsOnly, Category="Assassination")
+	UAnimMontage* AssassinationMontage;  // 玩家暗杀动作
 
 	// HealthWidgetClass
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
@@ -379,6 +384,54 @@ private:
 
 	UFUNCTION(BlueprintCallable, Category = "SaveGame")
 	void LoadGame();
+
+	/*
+	* crouch暗杀相关
+	*/
+	UPROPERTY(EditAnywhere, Category="Crouch")
+	float CrouchWalkSpeed = 200.f;
+	
+	// 站立时缓存的速度（用于恢复）
+	float PreCrouchWalkSpeed = 400.f;
+
+	UPROPERTY(BlueprintReadOnly, Category="Crouch", meta=(AllowPrivateAccess="true"))
+	bool bIsCrouching = false;
+
+	UPROPERTY(BlueprintReadOnly, Category="Assassination", meta=(AllowPrivateAccess="true"))
+	bool bIsAssassinating = false;
+
+	UPROPERTY(BlueprintReadOnly, Category="Assassination", meta=(AllowPrivateAccess="true"))
+	AEnemy* AssassinationTarget = nullptr;
+
+	bool CanEnterCrouch() const;
+	void ExitCrouch();
+
+	/* 暗杀配置参数 */
+	UPROPERTY(EditAnywhere, Category="Assassination")
+	float AssassinationRange = 150.f;  // 1.5米（150cm）
+	
+	UPROPERTY(EditAnywhere, Category="Assassination")
+	float AssassinationAngleThreshold = 0.5f;  // DotProduct阈值
+	
+	/* 暗杀函数 */
+	UFUNCTION()
+	AEnemy* FindNearestAssassinationTarget();
+
+	UFUNCTION()
+	bool CanAssassinate(AEnemy* Target) const;
+	
+	UFUNCTION()
+	void StartAssassinate(AEnemy* Target);
+	
+	UFUNCTION()
+	void EndAssassinate();
+
+	UFUNCTION()
+	void OnAssassinationMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	
+	// 动画通知回调（在动画中段调用，实际造成伤害）
+	UFUNCTION(BlueprintCallable, Category="Assassination")
+	void ExecuteAssassinationDamage();
 
 	/*
 	* 形态轮盘相关
@@ -741,6 +794,12 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> PickupAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInputAction> CrouchAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInputAction> AssassinateAction;
 
 	UPROPERTY(VisibleAnywhere)
 	AItem* OverlappingItem;

@@ -14,6 +14,7 @@ class UBlackboardComponent;
 class UBehaviorTree;
 class UHealthWidget;
 class AWeaponActor;
+class AAlexCharacter;
 
 // 攻击类型枚举
 UENUM(BlueprintType)
@@ -177,8 +178,29 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI")
 	EAIState CurrentAIState = EAIState::Idle;
 
+	// 被暗杀入口
+	UFUNCTION()
+    void EnterAssassination(AAlexCharacter* Assassin);
+
+	UFUNCTION()
+    void PlayAssassinatedMontage();
+    
+    UFUNCTION()
+    void DieFromAssassination();  // 立即死亡，不走普通TakeDamage
+    
+    // 检查是否正在被暗杀（防止重复）
+    UFUNCTION()
+    bool IsBeingAssassinated() const { return bIsBeingAssassinated; }
+
 protected:
 	virtual void BeginPlay() override;
+
+	// 被暗杀
+	UPROPERTY()
+    bool bIsBeingAssassinated = false;
+    
+    UPROPERTY(EditDefaultsOnly, Category="Assassination")
+    UAnimMontage* AssassinatedMontage;  // 敌人被暗杀动画
 
 	// 受击
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Hit")

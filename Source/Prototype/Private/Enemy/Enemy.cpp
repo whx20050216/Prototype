@@ -135,6 +135,42 @@ void AEnemy::CancelAttack()
 	}
 }
 
+void AEnemy::EnterAssassination(AAlexCharacter* Assassin)
+{
+	if (bIsBeingAssassinated) return;
+	bIsBeingAssassinated = true;
+
+	// 1. ÔİÍ£AIĞĞÎªÊ÷
+	if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
+    {
+        AIController->StopMovement();
+		if (AIController->GetBrainComponent())
+		{
+		    AIController->GetBrainComponent()->PauseLogic("Assassination");
+		}
+    }
+}
+
+void AEnemy::PlayAssassinatedMontage()
+{
+	if (AssassinatedMontage)
+    {
+        PlayAnimMontage(AssassinatedMontage);
+    }
+}
+
+void AEnemy::DieFromAssassination()
+{
+	if (GetCurrentAIState() != EAIState::Dead)
+    {
+        // ÉèÖÃËÀÍö×´Ì¬
+        CurrentAIState = EAIState::Dead;
+        
+        // ÑÓ³ÙÏú»Ù»òÁôÊ¬Ìå
+        SetLifeSpan(5.0f);
+    }
+}
+
 void AEnemy::BeginPlay()
 {
 	Super::BeginPlay();

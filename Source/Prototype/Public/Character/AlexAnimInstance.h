@@ -59,4 +59,7 @@ public:
 
 	UPROPERTY(BlueprintReadOnly)
 	float AimYaw = 0.f;  // 视角偏航角度
+
+	UPROPERTY(BlueprintReadOnly)
+	bool bIsCrouching;  // 是否蹲下
 };
