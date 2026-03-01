@@ -9,6 +9,7 @@
 class ULockOnManager;
 class UInputAction;
 class UInputMappingContext;
+class UUserWidget;
 
 UCLASS()
 class PROTOTYPE_API APrototypePlayerController : public APlayerController
@@ -17,7 +18,6 @@ class PROTOTYPE_API APrototypePlayerController : public APlayerController
 	
 public:
 	virtual void BeginPlay() override;
-
 	virtual void SetupInputComponent() override;
 
 	//锁定管理器
@@ -34,4 +34,21 @@ public:
 	//输入Action变量
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* LockOnAction;
+
+	//死亡与重生
+	UFUNCTION(BlueprintCallable, Category="Death")
+	void ShowDeathWidget();
+
+	UFUNCTION(BlueprintCallable, Category="Death")
+	void HideDeathWidget();
+
+	UFUNCTION(BlueprintCallable, Category="Death")
+	void OnRespawnButtonClicked();
+
+protected:
+	UPROPERTY(EditDefaultsOnly, Category = "Death")
+	TSubclassOf<UUserWidget> DeathWidgetClass;
+
+	UPROPERTY()
+	UUserWidget* DeathWidgetInstance;
 };

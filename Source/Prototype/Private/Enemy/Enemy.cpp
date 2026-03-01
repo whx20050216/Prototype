@@ -22,7 +22,7 @@ AEnemy::AEnemy()
 	PrimaryActorTick.bCanEverTick = true;
 
 	PawnSensing = CreateDefaultSubobject<UPawnSensingComponent>(TEXT("PawnSensing"));
-	PawnSensing->SightRadius = 3000.f;		//3000.f为视野半径
+	PawnSensing->SightRadius = 2000.f;		//3000.f为视野半径
 	PawnSensing->SetPeripheralVisionAngle(60.f);	// 100度总视野
 
 	// 指定AIController类
@@ -171,17 +171,24 @@ void AEnemy::BeginPlay()
 	// 生成武器
 	if (AttackConfigs.IsValidIndex(CurrentAttackIndex))
 	{
-		if (!AttackConfigs[CurrentAttackIndex].WeaponClass) return;
-
-		FActorSpawnParameters Params;
-		Params.Owner = this;
-		Weapon = GetWorld()->SpawnActor<AWeaponActor>(AttackConfigs[CurrentAttackIndex].WeaponClass, Params);
-		if (Weapon)
+		if (AttackConfigs[CurrentAttackIndex].WeaponClass)
 		{
-			FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, true);
-			Weapon->AttachToComponent(GetMesh(), AttachRules, FName("hand_r"));
-			Weapon->SetInstigator(this);
+			FActorSpawnParameters Params;
+			Params.Owner = this;
+			Weapon = GetWorld()->SpawnActor<AWeaponActor>(AttackConfigs[CurrentAttackIndex].WeaponClass, Params);
+			if (Weapon)
+			{
+				FAttachmentTransformRules AttachRules(EAttachmentRule::SnapToTarget, true);
+				Weapon->AttachToComponent(GetMesh(), AttachRules, FName("hand_r"));
+				Weapon->SetInstigator(this);
+			}
 		}
+	}
+
+	if (AssignedPatrolPath && BlackboardComp)
+	{
+		BlackboardComp->SetValueAsObject("PatrolPath", AssignedPatrolPath);
+		BlackboardComp->SetValueAsInt("CurrentPatrolIndex", 0);
 	}
 }
 
@@ -257,6 +264,11 @@ void AEnemy::EnterAlertState()
 {
 	CurrentAIState = EAIState::Alert;
 	CurrentSuspicion = SuspicionThreshold;	// 保持满值
+
+	if (AAlexCharacter* Player = Cast<AAlexCharacter>(GetPlayerActor()))
+    {
+        Player->RegisterSuspicionSource(this);
+    }
 
 	AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController());
     if (!AIController) return;

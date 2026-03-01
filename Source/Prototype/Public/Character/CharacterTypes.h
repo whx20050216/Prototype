@@ -20,10 +20,10 @@ enum class EActionState : uint8
 UENUM(BlueprintType)
 enum class EDetectionResult : uint8
 {
-	Clear UMETA(DisplayName = "畅通"),                    // 无障碍
-	WallRunPossible UMETA(DisplayName = "可墙跑"),        // 高墙
-	VaultPossible UMETA(DisplayName = "可翻越"),          // 矮障碍
-	Invalid UMETA(DisplayName = "无效")                    // 不满足条件
+	Clear UMETA(DisplayName = "Clear"),							// 无障碍
+	WallRunPossible UMETA(DisplayName = "WallRunPossible"),     // 高墙
+	VaultPossible UMETA(DisplayName = "VaultPossible"),         // 矮障碍
+	Invalid UMETA(DisplayName = "Invalid")                      // 不满足条件
 };
 
 UENUM(BlueprintType)
@@ -46,4 +46,12 @@ enum class ECharacterSoundType : uint8
     Land		UMETA(DisplayName="Land"),
     Attack		UMETA(DisplayName="Attack"),
     Hit			UMETA(DisplayName="Hit")
+};
+
+UENUM(BlueprintType)
+enum class EPathType : uint8
+{
+	Loop UMETA(DisplayName = "Loop"),			// 循环：0→1→2→0→1...
+	PingPong UMETA(DisplayName = "PingPong"),	// 往返：0→1→2→1→0→1...
+	Random UMETA(DisplayName = "Random")		// 随机：乱序跳跃（可能重复）
 };

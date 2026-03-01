@@ -28,6 +28,8 @@
 #include "Items/WeaponActor.h"
 #include "PrototypeSaveGame.h"
 #include "Components/ProgressBar.h"
+#include "AI/EnemyAIController.h"
+#include "PlayerController/PrototypePlayerController.h"
 
 AAlexCharacter::AAlexCharacter()
 {
@@ -294,6 +296,69 @@ void AAlexCharacter::SetHeldWeapon(AWeaponActor* NewWeapon)
             OldWeapon ? *OldWeapon->GetName() : TEXT("None"),
             NewWeapon ? *NewWeapon->GetName() : TEXT("None"));
     }
+}
+
+void AAlexCharacter::OnDeath()
+{
+	if (bIsDead) return;
+	bIsDead = true;
+
+	// 1. 广播死亡
+	OnCharacterDeath.Broadcast(this);
+
+	// 2. 清理敌人的目标（强制）
+	ClearAllSuspicionOnDeath();
+
+	// 3. 禁用输入
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		DisableInput(PC);
+
+		// 显示死亡UI
+		if (APrototypePlayerController* MyPC = Cast<APrototypePlayerController>(PC))
+        {
+            MyPC->ShowDeathWidget();
+        }
+	}
+
+	// 4. 禁用移动
+	if (GetCharacterMovement())
+	{
+		GetCharacterMovement()->DisableMovement();
+        GetCharacterMovement()->StopMovementImmediately();
+	}
+
+	// 5. 播放死亡动画
+	if (DeathMontage && GetMesh()->GetAnimInstance())
+	{
+		PlayAnimMontage(DeathMontage);
+
+		float AnimDuration = DeathMontage->GetPlayLength();
+		
+		FTimerHandle WidgetTimer;
+		GetWorldTimerManager().SetTimer(WidgetTimer, [this]()
+		{
+		    if (APrototypePlayerController* PC = Cast<APrototypePlayerController>(GetController()))
+		        PC->ShowDeathWidget();
+		}, AnimDuration * 0.8f, false);
+	}
+}
+
+void AAlexCharacter::ClearAllSuspicionOnDeath()
+{
+	for (AEnemy* Enemy : WatchingEnemies)
+	{
+		if (IsValid(Enemy) && Enemy->GetCurrentAIState() != EAIState::Dead)
+		{
+			if (AEnemyAIController* AIController = Cast<AEnemyAIController>(Enemy->GetController()))
+			{
+				AIController->ClearTargetPlayer();
+                AIController->SetAIState(EAIState::Idle);
+			}
+		}
+	}
+
+	WatchingEnemies.Empty();
 }
 
 void AAlexCharacter::BeginPlay()
@@ -2403,6 +2468,11 @@ float AAlexCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageE
 			OnCharacterDeath.Broadcast(this);
 		}
 	}
+
+	if (AttributeSet && AttributeSet->GetHealth() <= 0.0f && !bIsDead)
+    {
+        OnDeath();
+    }
 
 	return ActualDamage;
 }

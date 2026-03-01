@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Character/BaseCharacter.h"
+#include "Enemy/PatrolPath.h"
 #include "Enemy.generated.h"
 
 class UPawnSensingComponent;
@@ -121,6 +122,16 @@ public:
 	// 行为树
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI")
     UBehaviorTree* BehaviorTree;
+
+	// 巡逻路径（同步到Blackboard）
+	UPROPERTY(EditAnywhere, Category="AI|Patrol")
+	APatrolPath* AssignedPatrolPath;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Patrol")
+	float PatrolWalkSpeed = 100.f;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Patrol")
+	float AlertRunSpeed = 200.f;
 
 	// 工具函数
 	UFUNCTION(BlueprintCallable, Category="AI")

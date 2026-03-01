@@ -221,6 +221,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Movement")
     void SetMovementLock(bool bLocked) { bLockMove = bLocked; }
 
+	/*
+	*	死亡逻辑
+	*/
+	// 死亡委托（给 UI 或 GameMode 监听）
+	UPROPERTY(BlueprintAssignable)
+	FOnCharacterDeath OnCharacterDeath;
+
+	UFUNCTION(BlueprintCallable, Category="Death")
+    void OnDeath();  // 死亡入口
+
+	UFUNCTION(BlueprintPure, Category="Death")
+    bool IsDead() const { return bIsDead; }
+
+	UFUNCTION(BlueprintCallable, Category="Death")
+	void ClearAllSuspicionOnDeath();
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -273,6 +289,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="AnimMontage")
 	UAnimMontage* WallRunBackFlipMontage;	// 墙跑急停后空翻动作
+
+	UPROPERTY(EditDefaultsOnly, Category="Death")
+    UAnimMontage* DeathMontage;			// 死亡动作
 
 	// HealthWidgetClass
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
@@ -341,16 +360,16 @@ protected:
 	UFUNCTION()
 	void OnAbilityInputReleased(FGameplayTag InputTag);
 
-	// 死亡委托（给 UI 或 GameMode 监听）
-	UPROPERTY(BlueprintAssignable)
-	FOnCharacterDeath OnCharacterDeath;
-
 	// GAS初始化（必须）
     virtual void PossessedBy(AController* NewController) override;
 
 private:
 	UPROPERTY(BlueprintReadOnly, Category="Input", meta = (AllowPrivateAccess = "true"))
 	bool bHasMovementInput = false;			// 是否有移动输入
+
+	// 死亡相关
+	bool bIsDead = false;
+    FTimerHandle DeathTimerHandle;
 
 	/*
 	* 存档

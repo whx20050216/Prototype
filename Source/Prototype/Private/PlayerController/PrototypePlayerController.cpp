@@ -5,6 +5,8 @@
 #include "PlayerController/LockOnManager.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Blueprint/UserWidget.h"
+#include "PrototypeGameMode.h"
 
 void APrototypePlayerController::BeginPlay()
 {
@@ -34,5 +36,43 @@ void APrototypePlayerController::Input_ToggleLockOn()
 	if (LockOnManager)
 	{
 		LockOnManager->ToggleLockOn();
+	}
+}
+
+void APrototypePlayerController::ShowDeathWidget()
+{
+	if (DeathWidgetClass && !DeathWidgetInstance)
+	{
+		DeathWidgetInstance = CreateWidget<UUserWidget>(this, DeathWidgetClass);
+		if (DeathWidgetInstance)
+		{
+			DeathWidgetInstance->AddToViewport();
+			// œ‘ æ Û±Í
+			SetInputMode(FInputModeUIOnly());
+			bShowMouseCursor = true;
+		}
+	}
+}
+
+void APrototypePlayerController::HideDeathWidget()
+{
+	if (DeathWidgetInstance)
+	{
+		DeathWidgetInstance->RemoveFromParent();
+		DeathWidgetInstance = nullptr;
+
+		// ª÷∏¥”Œœ∑
+		SetInputMode(FInputModeGameOnly());
+		bShowMouseCursor = false;
+	}
+}
+
+void APrototypePlayerController::OnRespawnButtonClicked()
+{
+	HideDeathWidget();
+
+	if (APrototypeGameMode* GameMode = Cast<APrototypeGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		GameMode->RespawnPlayer();
 	}
 }
