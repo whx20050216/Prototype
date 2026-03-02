@@ -245,6 +245,7 @@ protected:
 	void MOVE(const FInputActionValue& Value);
 	void MOVE_Completed(const FInputActionValue& Value);
 	void LOOK(const FInputActionValue& Value);
+	void ZOOM(const FInputActionValue& Value);
 	void JumpPressed();
 	void JumpReleased();
 	void WALK();
@@ -297,6 +298,16 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Assassination")
 	UAnimMontage* AssassinationMontage;  // 玩家暗杀动作
+
+	/* 相机距离限制 */
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float MinCameraDistance = 150.0f;  // 最近（第三人称过肩视角）
+	
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float MaxCameraDistance = 600.0f;  // 最远（全景视角）
+	
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float ZoomSpeed = 50.0f;  // 缩放灵敏度
 
 	// HealthWidgetClass
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
@@ -769,6 +780,9 @@ private:
 	UInputAction* LookAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
+	UInputAction* ZoomAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
 	UInputAction* JumpAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
@@ -781,7 +795,7 @@ private:
 	UInputAction* DashAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
-	UInputAction* ClimbAction;
+	UInputAction* ClimbAction;	
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input", meta = (AllowPrivateAccess = "true"))
 	UInputAction* AttackAction;

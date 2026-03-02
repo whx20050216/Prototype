@@ -30,6 +30,7 @@
 #include "Components/ProgressBar.h"
 #include "AI/EnemyAIController.h"
 #include "PlayerController/PrototypePlayerController.h"
+#include "BehaviorTree/BehaviorTree.h"
 
 AAlexCharacter::AAlexCharacter()
 {
@@ -37,6 +38,7 @@ AAlexCharacter::AAlexCharacter()
 
 	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
 	SpringArm->TargetArmLength = 300.0f;
+	SpringArm->SocketOffset = FVector(0.0f, 15.0f, 60.0f);
 	ViewCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ViewCamera"));
 	SpringArm->SetupAttachment(GetRootComponent());
 	ViewCamera->SetupAttachment(SpringArm);
@@ -171,6 +173,7 @@ void AAlexCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AAlexCharacter::MOVE);
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &AAlexCharacter::MOVE_Completed);
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AAlexCharacter::LOOK);
+		EnhancedInputComponent->BindAction(ZoomAction, ETriggerEvent::Triggered, this, &AAlexCharacter::ZOOM);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AAlexCharacter::JumpPressed);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AAlexCharacter::JumpReleased);
 		EnhancedInputComponent->BindAction(WalkAction, ETriggerEvent::Started, this, &AAlexCharacter::WALK);
@@ -363,7 +366,10 @@ void AAlexCharacter::ClearAllSuspicionOnDeath()
 			{
 				AIController->ClearTargetPlayer();
                 AIController->SetAIState(EAIState::Idle);
+				AIController->SetIsAttacking(false);
+				AIController->StopMovement();
 			}
+			Enemy->CancelAttack();
 		}
 	}
 
@@ -498,6 +504,17 @@ void AAlexCharacter::LOOK(const FInputActionValue& Value)
 		AddControllerYawInput(LookAxisVector.X);
 		AddControllerPitchInput(LookAxisVector.Y);
 	}
+}
+
+void AAlexCharacter::ZOOM(const FInputActionValue& Value)
+{
+	if (!SpringArm) return;
+
+	// 获取滚轮输入（向上滚=+1，向下滚=-1）
+	float ZoomValue = Value.Get<float>();
+	// 计算新距离：向上滚缩短距离（拉近），向下滚增加距离（拉远）
+	float NewLength = SpringArm->TargetArmLength - ZoomValue * ZoomSpeed;
+	SpringArm->TargetArmLength = FMath::Clamp(NewLength, MinCameraDistance, MaxCameraDistance);
 }
 
 void AAlexCharacter::JumpPressed()

@@ -151,9 +151,15 @@ bool AEnemyAIController::GetIsAttacking() const
 
 void AEnemyAIController::SetAIState(EAIState NewState)
 {
-	if (BlackboardComp)
+    if (!BlackboardComp) return;
+
+    EAIState CurrentState = static_cast<EAIState>(BlackboardComp->GetValueAsEnum("AIState"));
+    if (CurrentState == NewState) return;
+
+    BlackboardComp->SetValueAsEnum("AIState", (uint8)NewState);
+    if (NewState == EAIState::Alert)
     {
-        BlackboardComp->SetValueAsEnum("AIState", (uint8)NewState);
+        StopMovement();
     }
 }
 

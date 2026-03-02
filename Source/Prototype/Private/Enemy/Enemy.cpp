@@ -76,6 +76,15 @@ void AEnemy::Tick(float DeltaTime)
 
 void AEnemy::ExecuteAttack()
 {
+	if (AAlexCharacter* Player = Cast<AAlexCharacter>(GetPlayerActor()))
+    {
+        if (Player->IsDead())
+        {
+            CancelAttack();  // 取消攻击
+            return;
+        }
+    }
+
 	if (AttackConfigs.Num() == 0) return;
 	if (bIsAttacking) return;
 
@@ -232,6 +241,31 @@ void AEnemy::UpdateSuspicion(float DeltaTime)
 {
 	AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController());
 	if (!AIController) return;
+
+	if (AAlexCharacter* Player = Cast<AAlexCharacter>(GetPlayerActor()))
+    {
+        if (Player->IsDead())
+        {
+            // 强制清空警觉并进入 Idle
+            if (CurrentAIState != EAIState::Idle)
+            {
+                CurrentSuspicion = 0.f;
+                CurrentAIState = EAIState::Idle;
+                bIsAiming = false;
+                bCanSeePlayer = false;
+                
+                if (AEnemyAIController* AIC = Cast<AEnemyAIController>(GetController()))
+                {
+                    AIC->SetAIState(EAIState::Idle);
+                    AIC->ClearTargetPlayer();
+                    AIC->SetIsAttacking(false);
+                }
+                
+                Player->UnregisterSuspicionSource(this);
+            }
+            return;  // 跳过所有警觉累积逻辑
+        }
+    }
 
 	// 如果是"狂暴/感染体"类型，看到玩家直接 Alert，不累积黄条
     if (bSkipSuspicion && bCanSeePlayer && CurrentAIState != EAIState::Alert)
@@ -535,6 +569,11 @@ void AEnemy::OnSeePlayer(APawn* Pawn)
 {
 	if (AAlexCharacter* Player = Cast<AAlexCharacter>(Pawn))
 	{
+		if (Player->IsDead()) 
+        {
+            return;
+        }
+
 		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Find Player")));
 		// 只是标记看到玩家，具体行为由 UpdateSuspicion 驱动
 		bCanSeePlayer = true;
