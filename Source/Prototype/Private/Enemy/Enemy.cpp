@@ -16,6 +16,7 @@
 #include "Engine/OverlapResult.h"
 #include "Items/WeaponActor.h"
 #include "BrainComponent.h"
+#include "Components/CapsuleComponent.h"
 
 AEnemy::AEnemy()
 {
@@ -130,7 +131,6 @@ bool AEnemy::CanPerformAttack() const
 void AEnemy::CancelAttack()
 {
 	StopAllMontages();
-	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Cancel Attack")));
 	if (bIsAttacking)
 	{
 		bIsAttacking = false;
@@ -175,6 +175,11 @@ void AEnemy::DieFromAssassination()
         // 设置死亡状态
         CurrentAIState = EAIState::Dead;
         
+		if (AAlexCharacter* Player = Cast<AAlexCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0)))
+        {
+            Player->OnKillEnemy(30.f);
+        }
+
         // 延迟销毁或留尸体
         SetLifeSpan(5.0f);
     }
@@ -353,7 +358,7 @@ void AEnemy::EnterAlertState()
 
 	// 3. 广播给附近敌人（让他们进入Suspicious）
 	FVector Location = GetActorLocation();
-    float AlertRadius = 2000.f; // 20米
+    float AlertRadius = 3000.f; // 30米
 	TArray<FOverlapResult> Overlaps;
     FCollisionShape Sphere = FCollisionShape::MakeSphere(AlertRadius);
 	if (GetWorld()->OverlapMultiByChannel(Overlaps, Location, FQuat::Identity, ECC_Pawn, Sphere))
@@ -367,7 +372,7 @@ void AEnemy::EnterAlertState()
                 NearbyEnemy->CurrentAIState != EAIState::Alert && 
                 NearbyEnemy->CurrentAIState != EAIState::Dead)
             {
-                // 新增：只有同类型才互相唤醒（感染体唤醒感染体，军队唤醒军队）
+                // 只有同类型才互相唤醒（感染体唤醒感染体，军队唤醒军队）
 				if (NearbyEnemy->bSkipSuspicion == this->bSkipSuspicion)
 				{
 				    NearbyEnemy->ForceEnterAlert();
@@ -375,8 +380,6 @@ void AEnemy::EnterAlertState()
             }
 		}
 	}
-	GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, 
-        FString::Printf(TEXT("%s Enter Alert State And Broadcast！"), *GetName()));
 	const FAttackConfig& Config = AttackConfigs[CurrentAttackIndex];
 	if (Config.Type != EAttackType::Melee)
 	{
@@ -544,6 +547,16 @@ void AEnemy::OnHealthDepleted()
 	}
 
 	GetWorldTimerManager().ClearAllTimersForObject(this);
+
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+	    Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+	if (USkeletalMeshComponent* SkelMesh = GetMesh())
+	{
+	    SkelMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
 	// 标记死亡状态
     CurrentAIState = EAIState::Dead;
 	if (AEnemyAIController* AIController = Cast<AEnemyAIController>(GetController()))
@@ -553,6 +566,11 @@ void AEnemy::OnHealthDepleted()
 
 	GetWorldTimerManager().ClearTimer(HideHealthBarTimer);
 	HideHealthBar();
+
+	if (AAlexCharacter* Player = Cast<AAlexCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0)))
+    {
+        Player->OnKillEnemy(30.f);
+    }
 
 	if (DeathMontage)
 	{
@@ -567,6 +585,8 @@ void AEnemy::OnHealthDepleted()
 
 void AEnemy::OnSeePlayer(APawn* Pawn)
 {
+	if (!PawnSensing->HasLineOfSightTo(Pawn)) return;
+
 	if (AAlexCharacter* Player = Cast<AAlexCharacter>(Pawn))
 	{
 		if (Player->IsDead()) 
@@ -574,7 +594,6 @@ void AEnemy::OnSeePlayer(APawn* Pawn)
             return;
         }
 
-		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Find Player")));
 		// 只是标记看到玩家，具体行为由 UpdateSuspicion 驱动
 		bCanSeePlayer = true;
 
@@ -671,6 +690,12 @@ void AEnemy::CheckPlayerVisibility()
 	APawn* PlayerPawn = Cast<APawn>(Target);
 	bool bStillVisible = PawnSensing->CouldSeePawn(PlayerPawn);
 
+	// 检查是否被墙挡住（视线检测）
+    if (bStillVisible && PlayerPawn)
+    {
+        bStillVisible = PawnSensing->HasLineOfSightTo(PlayerPawn);
+    }
+
 	if (!bStillVisible)
 	{
 		bCanSeePlayer = false;
@@ -745,7 +770,6 @@ float AEnemy::GetCurrentAimPitch() const
 
 void AEnemy::ExecuteMeleeAttack(const FAttackConfig& AttackConfig)
 {
-	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("Execute Melee Attack")));
 	AnimationConfig = AttackConfig.Animation;
 	PlayAnimationWithSections(AttackConfig.Animation.Montage, AttackConfig.Animation.SectionSequence, AttackConfig.Animation.PlayRate);
 }
@@ -758,8 +782,6 @@ void AEnemy::ExecuteProjectileAttack(const FAttackConfig& AttackConfig)
 
 	FVector MuzzleLocation = Weapon->GetMuzzlePoint()->GetComponentLocation();
 	Weapon->Fire(MuzzleLocation, CachedMuzzleRotation, AttackConfig.Damage);
-
-	//PlayAnimation(AttackConfig.Animation.Montage, AttackConfig.Animation.SectionName, AttackConfig.Animation.PlayRate);
 }
 
 void AEnemy::ExecuteRaycastAttack(const FAttackConfig& AttackConfig)
@@ -782,7 +804,7 @@ void AEnemy::ExecuteRaycastAttack(const FAttackConfig& AttackConfig)
 			QueryParams
 		);
 
-		DrawDebugLine(GetWorld(), Start, End, FColor::Red, false, 2.0f, 0, 2.0f);
+		// DrawDebugLine(GetWorld(), Start, End, FColor::Red, false, 2.0f, 0, 2.0f);
 
 		if (bHit && HitResult.GetActor() == Player)
 		{
@@ -793,7 +815,7 @@ void AEnemy::ExecuteRaycastAttack(const FAttackConfig& AttackConfig)
 				this,
 				UDamageType::StaticClass()
 			);
-			DrawDebugSphere(GetWorld(), HitResult.Location, 20.0f, 12, FColor::Green, false, 2.0f);
+			// DrawDebugSphere(GetWorld(), HitResult.Location, 20.0f, 12, FColor::Green, false, 2.0f);
 		}
 	}
 }
@@ -811,7 +833,7 @@ void AEnemy::OnAttackHit()
 	// 检测玩家（Pawn）通道
 	bool bHit = GetWorld()->SweepMultiByChannel(HitResults, Start, Start, FQuat::Identity, ECC_Pawn, Sphere);
 	// 调试可视化（开发时开启）
-    DrawDebugSphere(GetWorld(), Start, Config.MeleeRadius, 12, FColor::Red, false, 1.f);
+    // DrawDebugSphere(GetWorld(), Start, Config.MeleeRadius, 12, FColor::Red, false, 1.f);
 
 	if (bHit)
 	{

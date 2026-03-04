@@ -90,11 +90,11 @@ void UWallDetectionComponent::UpToDownTrace()
 	);
 
 	// Debug绘制：紫色线 + 橙色命中点
-	DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Purple, false, 0.1f, 0, 1.0f);
+	/*DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Purple, false, 0.1f, 0, 1.0f);
 	if (UpToDownHit.bBlockingHit)
 	{
 		DrawDebugSphere(GetWorld(), UpToDownHit.Location, 10.0f, 16, FColor::Orange, false, 0.1f);
-	}
+	}*/
 }
 
 void UWallDetectionComponent::BottomTrace()
@@ -117,29 +117,29 @@ void UWallDetectionComponent::BottomTrace()
 		);
 	}
 	//Debug
-	FColor LineColor = BottomHit.bBlockingHit ? FColor::Red : FColor::Blue;
-    DrawDebugLine(
-        GetWorld(),
-        Start,
-        BottomHit.bBlockingHit ? BottomHit.Location : End,  // 命中点画到击中点
-        LineColor,
-        false,        // 不持久
-        0.1f,         // 显示0.1秒
-        0,            // DepthPriority
-        1.0f          // 线宽
-    );
-	if (BottomHit.bBlockingHit)
-    {
-        DrawDebugSphere(
-            GetWorld(),
-            BottomHit.Location,
-            10.0f,        // 半径
-            16,           // 分段数
-            FColor::Green,
-            false,        // 不持久
-            0.1f          // 显示0.1秒
-        );
-    }
+	//FColor LineColor = BottomHit.bBlockingHit ? FColor::Red : FColor::Blue;
+ //   DrawDebugLine(
+ //       GetWorld(),
+ //       Start,
+ //       BottomHit.bBlockingHit ? BottomHit.Location : End,  // 命中点画到击中点
+ //       LineColor,
+ //       false,        // 不持久
+ //       0.1f,         // 显示0.1秒
+ //       0,            // DepthPriority
+ //       1.0f          // 线宽
+ //   );
+	//if (BottomHit.bBlockingHit)
+ //   {
+ //       DrawDebugSphere(
+ //           GetWorld(),
+ //           BottomHit.Location,
+ //           10.0f,        // 半径
+ //           16,           // 分段数
+ //           FColor::Green,
+ //           false,        // 不持久
+ //           0.1f          // 显示0.1秒
+ //       );
+ //   }
 }
 
 void UWallDetectionComponent::TopTrace()
@@ -162,29 +162,29 @@ void UWallDetectionComponent::TopTrace()
 		);
 	}
 
-	FColor LineColor = TopHit.bBlockingHit ? FColor::Yellow : FColor::Blue;
-	DrawDebugLine(
-    GetWorld(),
-    Start,
-    TopHit.bBlockingHit ? TopHit.Location : End,  // 命中点画到击中点
-    LineColor,
-    false,        // 不持久
-    0.1f,         // 显示0.1秒
-    0,            // DepthPriority
-    1.0f          // 线宽
-	);
-	if (TopHit.bBlockingHit)
-	{
-	    DrawDebugSphere(
-	        GetWorld(),
-	        TopHit.Location,
-	        10.0f,        // 半径
-	        16,           // 分段数
-	        FColor::Green,
-	        false,        // 不持久
-	        0.1f          // 显示0.1秒
-	    );
-	}
+	//FColor LineColor = TopHit.bBlockingHit ? FColor::Yellow : FColor::Blue;
+	//DrawDebugLine(
+ //   GetWorld(),
+ //   Start,
+ //   TopHit.bBlockingHit ? TopHit.Location : End,  // 命中点画到击中点
+ //   LineColor,
+ //   false,        // 不持久
+ //   0.1f,         // 显示0.1秒
+ //   0,            // DepthPriority
+ //   1.0f          // 线宽
+	//);
+	//if (TopHit.bBlockingHit)
+	//{
+	//    DrawDebugSphere(
+	//        GetWorld(),
+	//        TopHit.Location,
+	//        10.0f,        // 半径
+	//        16,           // 分段数
+	//        FColor::Green,
+	//        false,        // 不持久
+	//        0.1f          // 显示0.1秒
+	//    );
+	//}
 }
 
 void UWallDetectionComponent::MiddleTrace()
@@ -208,29 +208,29 @@ void UWallDetectionComponent::MiddleTrace()
 		MiddlePointLocation = MiddleHit.Location;
 	}
 
-	FColor LineColor = MiddleHit.bBlockingHit ? FColor::Purple : FColor::Blue;
-	DrawDebugLine(
-	GetWorld(),
-	Start,
-	MiddleHit.bBlockingHit ? MiddleHit.Location : End,  // 命中点画到击中点
-	LineColor,
-	false,        // 不持久
-	0.1f,         // 显示0.1秒
-	0,            // DepthPriority
-	1.0f          // 线宽
-	);
-	if (MiddleHit.bBlockingHit)
-	{
-	    DrawDebugSphere(
-	        GetWorld(),
-	        MiddleHit.Location,
-	        10.0f,        // 半径
-	        16,           // 分段数
-	        FColor::Green,
-	        false,        // 不持久
-	        0.1f          // 显示0.1秒
-	    );
-	}
+	//FColor LineColor = MiddleHit.bBlockingHit ? FColor::Purple : FColor::Blue;
+	//DrawDebugLine(
+	//GetWorld(),
+	//Start,
+	//MiddleHit.bBlockingHit ? MiddleHit.Location : End,  // 命中点画到击中点
+	//LineColor,
+	//false,        // 不持久
+	//0.1f,         // 显示0.1秒
+	//0,            // DepthPriority
+	//1.0f          // 线宽
+	//);
+	//if (MiddleHit.bBlockingHit)
+	//{
+	//    DrawDebugSphere(
+	//        GetWorld(),
+	//        MiddleHit.Location,
+	//        10.0f,        // 半径
+	//        16,           // 分段数
+	//        FColor::Green,
+	//        false,        // 不持久
+	//        0.1f          // 显示0.1秒
+	//    );
+	//}
 }
 
 void UWallDetectionComponent::EvaluateResults()
@@ -290,43 +290,43 @@ void UWallDetectionComponent::CapsuleTrace(const FVector& Direction, FHitResult&
 		QueryParams
 	);
 
-	// 统一调试绘制
-	DrawDebugLine(
-		GetWorld(),
-		Start,
-		OutHitResult.bBlockingHit ? OutHitResult.Location : End,
-		DebugColor,
-		false,
-		0.1f,
-		0,
-		1.0f
-	);
+	//// 统一调试绘制
+	//DrawDebugLine(
+	//	GetWorld(),
+	//	Start,
+	//	OutHitResult.bBlockingHit ? OutHitResult.Location : End,
+	//	DebugColor,
+	//	false,
+	//	0.1f,
+	//	0,
+	//	1.0f
+	//);
 
-	if (OutHitResult.bBlockingHit)
-	{
-		// 绘制命中点
-		DrawDebugSphere(
-			GetWorld(),
-			OutHitResult.Location,
-			10.0f,
-			16,
-			FColor::Green,
-			false,
-			0.1f
-		);
+	//if (OutHitResult.bBlockingHit)
+	//{
+	//	// 绘制命中点
+	//	DrawDebugSphere(
+	//		GetWorld(),
+	//		OutHitResult.Location,
+	//		10.0f,
+	//		16,
+	//		FColor::Green,
+	//		false,
+	//		0.1f
+	//	);
 
-		// 绘制胶囊体轮廓
-		DrawDebugCapsule(
-			GetWorld(),
-			OutHitResult.Location,
-			CapsuleHalf,
-			CapsuleRadius,
-			FQuat::Identity,
-			DebugColor,
-			false,
-			0.1f
-		);
-	}
+	//	// 绘制胶囊体轮廓
+	//	DrawDebugCapsule(
+	//		GetWorld(),
+	//		OutHitResult.Location,
+	//		CapsuleHalf,
+	//		CapsuleRadius,
+	//		FQuat::Identity,
+	//		DebugColor,
+	//		false,
+	//		0.1f
+	//	);
+	//}
 }
 
 void UWallDetectionComponent::RightCapsuleTrace()
@@ -371,7 +371,7 @@ void UWallDetectionComponent::UpperTrace()
 		);
 
 		// Debug 绘制：未命中青色，命中白色，命中点黄色
-		FColor LineColor = UpperHit.bBlockingHit ? FColor::White : FColor::Cyan;
+		/*FColor LineColor = UpperHit.bBlockingHit ? FColor::White : FColor::Cyan;
 		DrawDebugLine(
 			GetWorld(),
 			Start,
@@ -394,7 +394,7 @@ void UWallDetectionComponent::UpperTrace()
 				false,
 				0.1f
 			);
-		}
+		}*/
 	}
 }
 

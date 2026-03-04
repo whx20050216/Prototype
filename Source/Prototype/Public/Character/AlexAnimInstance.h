@@ -62,4 +62,7 @@ public:
 
 	UPROPERTY(BlueprintReadOnly)
 	bool bIsCrouching;  // 是否蹲下
+
+	UPROPERTY()
+	bool bIsGrabing;	// 是否抓取
 };

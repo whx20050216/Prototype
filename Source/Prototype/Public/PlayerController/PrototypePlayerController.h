@@ -10,6 +10,8 @@ class ULockOnManager;
 class UInputAction;
 class UInputMappingContext;
 class UUserWidget;
+class UAudioComponent;
+class USoundBase;
 
 UCLASS()
 class PROTOTYPE_API APrototypePlayerController : public APlayerController
@@ -35,6 +37,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* LockOnAction;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* PauseAction;
+
 	//死亡与重生
 	UFUNCTION(BlueprintCallable, Category="Death")
 	void ShowDeathWidget();
@@ -45,10 +50,45 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Death")
 	void OnRespawnButtonClicked();
 
+	// 菜单控制
+	void ShowMainMenu();
+
+	UFUNCTION(BlueprintCallable)
+	void StartGame();
+
+	UFUNCTION(BlueprintCallable)
+	void ReturnToMainMenu();
+
+	UFUNCTION(BlueprintCallable)
+	void QuitGame();
+
+	UFUNCTION(BlueprintCallable)
+	void TogglePauseMenu();	// 暂停菜单
+
+	UPROPERTY(BlueprintReadOnly)
+	bool bIsPaused = false;
+
+	UPROPERTY(BlueprintReadOnly)
+	bool bInMainMenu = false;	// true=主菜单, false=游戏中
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UUserWidget> MenuWidgetClass;
+
+	// 菜单背景音乐
+	UPROPERTY()
+	UAudioComponent* MenuMusic;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Audio")
+	USoundBase* MainMenuMusic;
+
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Death")
 	TSubclassOf<UUserWidget> DeathWidgetClass;
 
 	UPROPERTY()
 	UUserWidget* DeathWidgetInstance;
+
+private:
+	UPROPERTY()
+	TObjectPtr<UUserWidget> MenuWidget;
 };

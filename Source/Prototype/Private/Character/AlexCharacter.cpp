@@ -24,6 +24,7 @@
 #include "GAS/Input/InputConfig.h"
 #include "GAS/Abilities/GA_AlexAttack.h"
 #include "GAS/Abilities/GA_RangeAttack.h"
+#include "GAS/Abilities/GA_Dash.h"
 #include "GAS/AbilitySet.h"
 #include "Items/WeaponActor.h"
 #include "PrototypeSaveGame.h"
@@ -570,6 +571,11 @@ void AAlexCharacter::JumpReleased()
 
 	if (GetCharacterMovement()->IsFalling()) return;
 
+	if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dashing")));
+    }
+
 	ExecuteChargeJump();
 }
 
@@ -607,29 +613,38 @@ void AAlexCharacter::RUN()
 
 void AAlexCharacter::DASH()
 {
-	if (!AbilitySystemComponent) return;
-
-	if (AttributeSet)
+	if (ActionState == EActionState::EAS_Gliding)
     {
-        UE_LOG(LogTemp, Warning, TEXT(">>> DASH ATTEMPT | State: %s | Charges: %.0f"), 
-            *UEnum::GetValueAsString(ActionState),
-            AttributeSet->GetDashCharges());  // 如果还没加这个变量，先删掉这个参数
+        StopGlide();
     }
 
-	bool bWasGliding = (ActionState == EActionState::EAS_Gliding);
-
-	FGameplayTagContainer TagContainer;
-    TagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Dash")));
+	if (AbilitySystemComponent)
+    {
+        for (FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
+        {
+            if (Spec.Ability && Spec.Ability->AbilityTags.HasTag(FGameplayTag::RequestGameplayTag(FName("Ability.Dash"))))
+            {
+                if (Spec.IsActive())
+                {
+                    AbilitySystemComponent->CancelAbility(Spec.Ability);
+                    UE_LOG(LogTemp, Warning, TEXT(">>> Cancelled stuck Dash"));
+                }
+            }
+        }
+    }
     
-    // 复数形式 Abilities，参数是 Container
-    bool bSuccess = AbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
+    OnAbilityInputPressed(FGameplayTag::RequestGameplayTag(FName("Ability.Dash")));
+}
 
-	UE_LOG(LogTemp, Warning, TEXT(">>> DASH RESULT: %s"), bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
-
-	if (bSuccess && bWasGliding)
-	{
-		StopGlide();
-	}
+void AAlexCharacter::OnKillEnemy(float HealAmount)
+{
+	if (!AttributeSet) return;
+    
+    float CurrentHealth = AttributeSet->GetHealth();
+    float MaxHealth = AttributeSet->GetMaxHealth();
+    float NewHealth = FMath::Min(CurrentHealth + HealAmount, MaxHealth);
+    
+    AttributeSet->SetHealth(NewHealth);
 }
 
 void AAlexCharacter::CLIMB()
@@ -662,12 +677,16 @@ void AAlexCharacter::ATTACK()
 
 	if (HeldWeapon)
 	{
+		if (GetCharacterMovement()->IsFalling()) return;
+
 		FGameplayTagContainer AttackTags;
         AttackTags.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.AttackRanged")));
         AbilitySystemComponent->TryActivateAbilitiesByTag(AttackTags);
 	}
 	else
 	{
+		if (GetCharacterMovement()->IsFalling()) return;
+
 		if (!AbilitySystemComponent) return;
 		
 		// 检查是否已有激活的 Attack Ability（用于连击）
@@ -794,7 +813,6 @@ void AAlexCharacter::Crouch()
 void AAlexCharacter::OnAssassinatePressed()
 {
 	if (bIsAssassinating || !bIsCrouching || bIsDead) return;
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("E Key Press")));
 	AEnemy* Target = nullptr;
 	if (LockedTarget)
 	{
@@ -806,12 +824,10 @@ void AAlexCharacter::OnAssassinatePressed()
 	}
 	if (!Target)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Target is null")));
 		return;
 	}
 	if (CanAssassinate(Target))
     {
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Assassinate")));
         StartAssassinate(Target);
     }
 }
@@ -892,7 +908,6 @@ TArray<AEnemy*> AAlexCharacter::GetVisibleEnemies()
 void AAlexCharacter::OnAbilityInputPressed(FGameplayTag InputTag)
 {
 	if (!AbilitySystemComponent || !InputTag.IsValid()) return;
-
 	// 1. 先检查是否已有对应Tag的Ability正在运行（连击关键！）
 	for (FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
 	{
@@ -901,13 +916,15 @@ void AAlexCharacter::OnAbilityInputPressed(FGameplayTag InputTag)
 		{
 			// 通知已激活的Ability：输入又按下了（GA_AlexAttack会用它触发下一段）
 			AbilitySystemComponent->AbilitySpecInputPressed(Spec);
+			UE_LOG(LogTemp, Warning, TEXT(">>> Found Active Spec for: %s"), *InputTag.ToString());
 			return;
 		}
 	}
 
 	// 2. 尝试激活对应 Tag 的 Ability
 	FGameplayTagContainer TagContainer(InputTag);
-	AbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
+	bool bActivated = AbilitySystemComponent->TryActivateAbilitiesByTag(TagContainer);
+	UE_LOG(LogTemp, Warning, TEXT(">>> TryActivate %s: %s"), *InputTag.ToString(), bActivated ? TEXT("SUCCESS") : TEXT("FAIL"));
 }
 
 void AAlexCharacter::OnAbilityInputReleased(FGameplayTag InputTag)
@@ -1194,7 +1211,10 @@ void AAlexCharacter::EndAssassinate()
     {
         EnableInput(PC);
     }
-
+	if (AttributeSet) 
+    {
+        AttributeSet->SetDashCharges(AttributeSet->GetMaxDashCharges());
+    }
 }
 
 void AAlexCharacter::OnAssassinationMontageEnded(UAnimMontage* Montage, bool bInterrupted)
@@ -1212,8 +1232,6 @@ void AAlexCharacter::ExecuteAssassinationDamage()
 void AAlexCharacter::ShowMorphWheel()
 {
 	if (!FormWheelWidgetClass) return;
-
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, TEXT("ShowMorphWheel"));
 
 	// 创建并显示轮盘
 	FormWheelWidget = CreateWidget<UFormWheelWidget>(GetWorld(), FormWheelWidgetClass);
@@ -1247,18 +1265,16 @@ void AAlexCharacter::ShowMorphWheel()
 		UGameplayStatics::SetGlobalTimeDilation(this, 0.1f);
 
 		// 显示鼠标光标
-		if (APlayerController* PC = Cast<APlayerController>(GetController()))
+		/*if (APlayerController* PC = Cast<APlayerController>(GetController()))
 		{
 			PC->bShowMouseCursor = true;
-		}
+		}*/
 
 	}
 }
 
 void AAlexCharacter::HideMorphWheelAndConfirm()
 {
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, TEXT("HideMorphWheelAndConfirm"));
-
 	// 恢复正常时间
 	UGameplayStatics::SetGlobalTimeDilation(this, 1.0f);
 
@@ -1726,12 +1742,6 @@ void AAlexCharacter::ConfirmLockOn()
 
 		// 通知目标被锁定（让敌人显示标记等）
 		ITargetableInterface::Execute_OnLocked(LockedTarget, GetController());
-		GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green, 
-            FString::Printf(TEXT("LockedTarget: %s"), *LockedTarget->GetName()));
-	}
-	else
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Red, FString::Printf(TEXT("No Target")));
 	}
 }
 
@@ -1740,8 +1750,6 @@ void AAlexCharacter::CancelLockOn()
 	if (LockedTarget)
 	{
 		ITargetableInterface::Execute_OnUnlocked(LockedTarget, GetController());
-		GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, 
-            FString::Printf(TEXT("UnLocked: %s"), *LockedTarget->GetName()));
 		LockedTarget = nullptr;
 	}
 }
@@ -1827,6 +1835,16 @@ void AAlexCharacter::OnVaultAnimEnd()
     ActionState = EActionState::EAS_Unoccupied;
     GetCharacterMovement()->SetMovementMode(MOVE_Walking);
     GetCharacterMovement()->bOrientRotationToMovement = true;
+
+	if (AttributeSet) 
+    {
+        AttributeSet->SetDashCharges(AttributeSet->GetMaxDashCharges());
+    }
+
+	if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dashing")));
+    }
 
     // 处理排队：立即尝试下一次翻越
     if (bVaultQueued)
@@ -1962,6 +1980,11 @@ void AAlexCharacter::OnRoofFlipEnded(UAnimMontage* Montage, bool bInterrupted)
         UE_LOG(LogTemp, Warning, TEXT(">>> Resetting Dash from RoofFlipEnd"));
         AttributeSet->SetDashCharges(AttributeSet->GetMaxDashCharges());
     }
+	if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dashing")));
+    }
+
 	bIsRoofFlipping = false;
 }
 
@@ -2006,8 +2029,8 @@ void AAlexCharacter::OnWallRunBackFlipEnded(UAnimMontage* Montage, bool bInterru
 
 	if (AbilitySystemComponent)
 	{
-		AbilitySystemComponent->RemoveLooseGameplayTag(
-			FGameplayTag::RequestGameplayTag(FName("State.WallRunning")));
+		AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.WallRunning")));
+		AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dashing")));
 	}
 
 	// 恢复重力设置
@@ -2142,6 +2165,15 @@ void AAlexCharacter::StopWallRun()
         AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.WallRunning")));
     }
 
+	if (AttributeSet) 
+    {
+        AttributeSet->SetDashCharges(AttributeSet->GetMaxDashCharges());
+    }
+	if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dashing")));
+    }
+
 	ResetRun();
 }
 
@@ -2159,7 +2191,6 @@ void AAlexCharacter::UpdateWallRun(float DeltaTime)
 	if (CheckApproachingRoof())
 	{
 		PerformRoofFlip();
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Approaching Roof")));
 		return;
 	}
 
@@ -2186,7 +2217,7 @@ void AAlexCharacter::UpdateWallRun(float DeltaTime)
 	FVector WallRight = FVector::CrossProduct(WallUp, -WallDetection->WallNormal).GetSafeNormal();
 	if (bHasMovementInput)
 	{
-		if (LastMovementInput.X > 0.01f)
+		/*if (LastMovementInput.X > 0.01f)
 		{
 			WallDetection->RightCapsuleTrace();
 			if (WallDetection->GetRightCapsuleHit().bBlockingHit)
@@ -2201,7 +2232,7 @@ void AAlexCharacter::UpdateWallRun(float DeltaTime)
 			{
 				GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Left Wall Hit"));
 			}
-		}
+		}*/
 
 		WallRunDirection = (WallRight * LastMovementInput.X + WallUp * LastMovementInput.Y).GetSafeNormal();
 		if (UAlexAnimInstance* AnimInst = Cast<UAlexAnimInstance>(GetMesh()->GetAnimInstance()))
@@ -2331,6 +2362,15 @@ void AAlexCharacter::StopClimb()
 		AnimInst->bIsClimbing = false;
 	}
 
+	if (AttributeSet) 
+    {
+        AttributeSet->SetDashCharges(AttributeSet->GetMaxDashCharges());
+    }
+
+	if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dashing")));
+    }
 	ResetRun();
 }
 
@@ -2458,7 +2498,12 @@ void AAlexCharacter::OnClimbMantleEnded(UAnimMontage* Montage, bool bInterrupted
 	if (AbilitySystemComponent)
 	{
 	    AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Climbing")));
+		AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dashing")));
 	}
+	if (AttributeSet) 
+    {
+        AttributeSet->SetDashCharges(AttributeSet->GetMaxDashCharges());
+    }
 }
 
 void AAlexCharacter::StartGlide()
@@ -2628,7 +2673,6 @@ void AAlexCharacter::InterruptSkid()
 	float CurrentSpeed = GetCharacterMovement()->Velocity.Size2D();
 	if (CurrentSpeed < 300.f) // 阈值可调，200 约等于走路速度
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Interrupt Skid")));
 		if (GetMesh()->GetAnimInstance()->Montage_IsPlaying(SkidMontage))
 		{
 			GetMesh()->GetAnimInstance()->Montage_Stop(0.2f, SkidMontage); // 0.2秒融合，不生硬
@@ -2754,6 +2798,11 @@ float AAlexCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageE
 void AAlexCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
+
+	if (AbilitySystemComponent)
+    {
+        AbilitySystemComponent->RemoveLooseGameplayTag(FGameplayTag::RequestGameplayTag(FName("State.Dashing")));
+    }
 
 	UE_LOG(LogTemp, Warning, TEXT(">>> LANDED TRIGGERED | State: %s"), 
         *UEnum::GetValueAsString(ActionState));

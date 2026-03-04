@@ -415,9 +415,6 @@ void UGA_AlexAttack::PerformDamageCheck()
 			}
 		}
 	}
-	#if ENABLE_DRAW_DEBUG
-	DrawDebugSphere(GetWorld(), Start, Radius, 12, FColor::Red, false, 0.5f);
-	#endif
 }
 
 void UGA_AlexAttack::OnMontageCompleted()

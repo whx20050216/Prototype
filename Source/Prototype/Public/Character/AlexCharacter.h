@@ -117,6 +117,8 @@ public:
 
 	UAlexAttributeSet* GetAttributeSet() const { return AttributeSet; }
 
+	EActionState GetActionState() const { return ActionState; }
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WallDetection")
 	UWallDetectionComponent* WallDetection;
 
@@ -237,6 +239,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Death")
 	void ClearAllSuspicionOnDeath();
 
+	// 滑翔时Dash退出滑翔逻辑（供GA_Dash使用）
+	UFUNCTION()
+	void DASH();
+
+	// 杀死敌人加血
+	UFUNCTION(BlueprintCallable, Category = "Health")
+	void OnKillEnemy(float HealAmount = 30.f);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -250,7 +260,6 @@ protected:
 	void JumpReleased();
 	void WALK();
 	void RUN();
-	void DASH();
 	void CLIMB();
 	void ATTACK();
 	void ATTACK_Released();
@@ -298,6 +307,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Assassination")
 	UAnimMontage* AssassinationMontage;  // 玩家暗杀动作
+
+	UPROPERTY(EditDefaultsOnly, Category = "Grab")
+	UAnimMontage* GrabMontage;	// 抓取敌人动作
 
 	/* 相机距离限制 */
 	UPROPERTY(EditAnywhere, Category = "Camera")
@@ -537,7 +549,7 @@ private:
 	float LockOnRange = 5000.f;        // 锁定最大距离（5000cm = 50米）
 	
 	UPROPERTY(EditAnywhere, Category="LockOn")
-	float LockOnSphereRadius = 150.f;  // 屏幕中心检测半径（越大越容易选中）
+	float LockOnSphereRadius = 300.f;  // 屏幕中心检测半径（越大越容易选中）
 
 	UPROPERTY(EditAnywhere, Category="LockOn", meta=(ClampMin=1, ClampMax=20))
 	float CameraRotationSpeed = 8.f;
@@ -586,7 +598,7 @@ private:
 	float MaxVaultHorizontalSpeed = 550.f;	// 最大水平速度
 
 	UPROPERTY(EditAnywhere, Category="Vault", meta=(ClampMin=0.5, ClampMax=2.0, UIMin=0.5, UIMax=2.0))
-	float VaultVerticalMultiplier = 1.4f; // 默认1.2倍
+	float VaultVerticalMultiplier = 1.4f; // 默认1.4倍
 	
 	// 连续翻越方法
 	void TryAutoVault();                    // 尝试翻越（可入队）

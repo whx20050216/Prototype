@@ -38,7 +38,6 @@ void AItem::OnSphereOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherAc
 	if (PickupInterface)
 	{
 		PickupInterface->SetOverlappingItem(this);
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, TEXT("Item Overlap"));
 	}
 }
 
@@ -48,7 +47,6 @@ void AItem::OnSphereEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* Othe
 	if (PickupInterface)
 	{
 		PickupInterface->SetOverlappingItem(nullptr);
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, TEXT("Item End Overlap"));
 	}
 }
 

@@ -6,9 +6,11 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GAS/AlexAttributeSet.h"
+#include "Character/AlexCharacter.h"
 
 UGA_Dash::UGA_Dash()
 {
+	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
 	// 默认Tag：这个技能属于"Ability.Dash"
 	AbilityTags.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Dash")));
 
@@ -40,6 +42,14 @@ bool UGA_Dash::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const
 
 void UGA_Dash::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
+	if (AAlexCharacter* AlexChar = Cast<AAlexCharacter>(ActorInfo->AvatarActor.Get()))
+    {
+        if (AlexChar->GetActionState() == EActionState::EAS_Gliding)
+        {
+			AlexChar->DASH();
+        }
+    }
+
 	// 1. 提交资源消耗（自动扣除DashCharges）
 	// 如果Commit失败（比如Charges=0），会自动EndAbility    
     if (!CommitAbility(Handle, ActorInfo, ActivationInfo))

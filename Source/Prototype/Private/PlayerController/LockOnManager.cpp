@@ -59,9 +59,6 @@ void ULockOnManager::SetLockedTarget(AActor* NewTarget, AController* InstigatorC
 
 	// 广播委托
 	OnLockOnTargetChanged.Broadcast(CurrentLockedActor);
-
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, 
-        FString::Printf(TEXT("Locked: %s"), *GetNameSafe(NewTarget)));
 }
 
 void ULockOnManager::ClearLockedTarget(AController* InstigatorController)
@@ -76,8 +73,6 @@ void ULockOnManager::ClearLockedTarget(AController* InstigatorController)
 
 	// 广播委托
 	OnLockOnTargetChanged.Broadcast(nullptr);
-
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Unlocked"));
 }
 
 void ULockOnManager::ScanTargets(float ScanRadius)
@@ -129,9 +124,6 @@ void ULockOnManager::ScanTargets(float ScanRadius)
             }
         }
     }
-
-    GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::White, 
-        FString::Printf(TEXT("Scan Completed，Visible Targets Num: %d"), TargetCandidates.Num()));
 }
 
 AActor* ULockOnManager::FindBestTarget()
