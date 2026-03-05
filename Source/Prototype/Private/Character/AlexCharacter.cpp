@@ -812,12 +812,8 @@ void AAlexCharacter::Crouch()
 
 void AAlexCharacter::OnAssassinatePressed()
 {
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Assassinate")));
-	if (bIsAssassinating || !bIsCrouching || bIsDead)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Can not")));
-		return;
-	}
+	if (bIsAssassinating || !bIsCrouching || bIsDead) return;
+
 	AEnemy* Target = nullptr;
 	if (LockedTarget)
 	{
@@ -829,17 +825,12 @@ void AAlexCharacter::OnAssassinatePressed()
 	}
 	if (!Target)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("No Nearest Target")));
 		return;
 	}
 	if (CanAssassinate(Target))
     {
         StartAssassinate(Target);
     }
-	else
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Not A Valid Target")));
-	}
 }
 
 void AAlexCharacter::UpdateSuspicionUI()
