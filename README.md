@@ -35,7 +35,7 @@
 
 ## 🏗️ 技术架构
 
-### 代码结构
+```### 代码结构
 Source/Prototype/
 ├── ActorComponent/
 │   ├── AttributeComponent.h      # 传统属性组件（血量/蓝条）
@@ -68,7 +68,7 @@ Source/Prototype/
 └── PlayerController/
 ├── PrototypePlayerController.h # 菜单控制、暂停、死亡重生
 └── LockOnManager.h           # 锁定管理器：目标扫描与切换
-
+```
 ### 关键技术实现
 
 #### 1. GAS 架构设计
