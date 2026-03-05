@@ -177,7 +177,7 @@ void AEnemy::DieFromAssassination()
         
 		if (AAlexCharacter* Player = Cast<AAlexCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0)))
         {
-            Player->OnKillEnemy(30.f);
+            Player->OnKillEnemy(300.f);
         }
 
         // ÑÓ³ÙÏú»Ù»òÁôÊ¬Ìå
@@ -569,7 +569,7 @@ void AEnemy::OnHealthDepleted()
 
 	if (AAlexCharacter* Player = Cast<AAlexCharacter>(UGameplayStatics::GetPlayerCharacter(this, 0)))
     {
-        Player->OnKillEnemy(30.f);
+        Player->OnKillEnemy(300.f);
     }
 
 	if (DeathMontage)

@@ -10,8 +10,8 @@
 UAlexAttributeSet::UAlexAttributeSet()
 {
 	// 必须初始化默认值
-    InitHealth(100.f);
-    InitMaxHealth(100.f);
+    InitHealth(1000.f);
+    InitMaxHealth(1000.f);
     InitMana(100.f);
     InitMaxMana(100.f);
     InitDashCharges(2.f);

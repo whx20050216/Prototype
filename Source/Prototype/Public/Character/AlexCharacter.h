@@ -245,7 +245,7 @@ public:
 
 	// 杀死敌人加血
 	UFUNCTION(BlueprintCallable, Category = "Health")
-	void OnKillEnemy(float HealAmount = 30.f);
+	void OnKillEnemy(float HealAmount = 300.f);
 
 protected:
 	virtual void BeginPlay() override;
