@@ -66,8 +66,8 @@ Source/Prototype/
 │   ├── WeaponActor.h             # 武器基类：拾取/装备/丢弃/发射
 │   └── Projectile.h              # 投射物：子弹与RPG爆炸伤害
 └── PlayerController/
-    ├── PrototypePlayerController.h # 菜单控制、暂停、死亡重生
-    └── LockOnManager.h           # 锁定管理器：目标扫描与切换
+├── PrototypePlayerController.h # 菜单控制、暂停、死亡重生
+└── LockOnManager.h           # 锁定管理器：目标扫描与切换
 ```
 
 ### 关键技术实现
