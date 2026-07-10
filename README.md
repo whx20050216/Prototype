@@ -13,7 +13,7 @@
 - 代码量：约9,000行（Source目录，49个代码文件，约6,700行有效代码）
 - 核心模块：GAS战斗系统、Parkour移动、AI行为树、UI交互
 
-## 🎮 核心特性
+## 核心特性
 
 ### 1. 高机动性跑酷系统 (Parkour System)
 - **自动翻越 (Vault)**：基于检测组件的障碍物高度计算，支持连续翻越与动态起跳速度
@@ -38,7 +38,7 @@
 - **形态轮盘 (Morph Wheel)**：按住 R 触发子弹时间，鼠标方位选择 5 种形态
 - **自适应 HUD**：血条/耐力条、弹药显示（当前/后备）、警觉进度条
 
-## 🏗️ 技术架构
+## 技术架构
 
 ```### 代码结构
 Source/Prototype/
@@ -101,7 +101,7 @@ void PerformDamageCheck(); // 扇形/球形检测 + 角度判定
 - **黑板同步**：`EnemyAIController` 将 `EAIState` 同步到 Blackboard，驱动 BehaviorTree 分支选择
 - **警觉条计算**：`UpdateSuspicion()` 中根据视野与距离线性插值增减警觉值，同步到 UI ProgressBar
 
-## 🎯 操作指南
+## 操作指南
 
 | 按键 | 功能 | 备注 |
 |------|------|------|
@@ -116,7 +116,7 @@ void PerformDamageCheck(); // 扇形/球形检测 + 角度判定
 | **左键** | 攻击 | 近战：连击系统；持枪：射击（M4 全自动/RPG 单发） |
 | **Esc** | 菜单 | 主菜单/暂停菜单切换 |
 
-## 🚀 快速开始
+## 快速开始
 
 ### 环境要求
 - Unreal Engine 5.4+
@@ -140,19 +140,19 @@ void PerformDamageCheck(); // 扇形/球形检测 + 角度判定
 - **输入映射**：创建 `IA_Attack`、`IA_Dash` 等增强输入动作，并在 `InputConfig` 数据资产中绑定对应 GameplayTag
 - **行为树**：为 `Enemy` 创建行为树，使用黑板键 `AIState`、`TargetPlayer`、`SuspicionLevel`
 
-## 📸 系统截图（建议补充）
+## 系统截图（建议补充）
 - [ ] 形态轮盘 UI 截图
 - [ ] 跑酷（墙跑+翻越）连续动作演示
 - [ ] AI 警觉条（黄→红）渐变效果
 - [ ] 软锁定 UI 框体动态缩放
 
-## 🛠️ 待优化项
+## 待优化项
 - [ ] 网络复制：当前 GAS 配置为单机模式，需完善网络同步（`SetIsReplicated` 与 Server RPC）
 - [ ] 存档系统：已实现 `PrototypeSaveGame` 基础结构，需补充完整关卡进度存储
 - [ ] 武器 Mesh 插槽：不同形态武器需在 Blender 中统一骨骼原点，避免运行时偏移
 - [ ] GA_Dash功能概率失效
 
-## 🙏 致谢
+## 致谢
 - 动画资源：[Mixamo](https://www.mixamo.com/)（基础角色动画）、Epic Games 官方
 - 音效/特效：Epic Games 官方
 - 架构参考：Unreal Engine Gameplay Ability System 官方文档
